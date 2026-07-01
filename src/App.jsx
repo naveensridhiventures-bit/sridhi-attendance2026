@@ -2,6 +2,7 @@ import React, { useState } from 'react'
 import { Routes, Route, useLocation } from 'react-router-dom'
 import BottomNav from './components/BottomNav.jsx'
 import Splash from './components/Splash.jsx'
+import InstallPrompt from './components/InstallPrompt.jsx'
 import useGlobalRipple from './hooks/useGlobalRipple.js'
 import Home from './pages/Home.jsx'
 import Attendance from './pages/Attendance.jsx'
@@ -25,6 +26,7 @@ export default function App() {
   return (
     <div className="min-h-screen bg-surface text-ink font-body flex flex-col">
       {showSplash && <Splash onDone={dismissSplash} />}
+      <InstallPrompt />
       <div className="flex-1 pb-28 safe-top">
         <div key={location.pathname} className="page-fade">
           <Routes location={location}>

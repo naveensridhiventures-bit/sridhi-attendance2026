@@ -6,8 +6,8 @@ import { useToast } from './Toast.jsx'
 // 1. Go to https://cloudinary.com → Settings → Upload → Upload presets
 //    Create an UNSIGNED preset and paste the name below.
 // 2. Find your Cloud Name on the Cloudinary dashboard top-left.
-const CLOUD_NAME  = 'wnqxgpib'
-const UPLOAD_PRESET = 'sridhi-hero' // e.g. 'sridhi_hero'
+const CLOUD_NAME  = 'REPLACE_YOUR_CLOUD_NAME'   // e.g. 'dxyz123ab'
+const UPLOAD_PRESET = 'REPLACE_YOUR_UPLOAD_PRESET' // e.g. 'sridhi_hero'
 // ──────────────────────────────────────────────────────────────────────────────
 
 export default function HeroImageUploader() {
