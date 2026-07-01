@@ -82,4 +82,4 @@ export const getAllEmployeesFull   = ()                           => callApi('ge
 export const updateSalary         = (employeeId, salary)         => callApi('updateSalary', { employeeId, salary })
 export const getMonthlySalary     = (year, month)                => callApi('getMonthlySalary', { year, month })
 export const getEmployeeSalary    = (employeeId, year, month)    => callApi('getEmployeeSalary', { employeeId, year, month })
-export const getMonthlyTabsList   = ()                           => callApi('getMonthlyTabsList')np
+export const getMonthlyTabsList   = ()                           => callApi('getMonthlyTabsList')
