@@ -4,7 +4,7 @@ import React from 'react'
 // a brand-true centerpiece visual instead of a generic chart.
 export default function EnergyGauge({ percent = 0, label = "Today's Attendance" }) {
   const clamped = Math.max(0, Math.min(100, percent))
-  const fillColor = clamped >= 70 ? '#F2D98A' : clamped >= 40 ? '#F2B544' : '#FF9B7A'
+  const fillColor = clamped >= 70 ? '#00C853' : clamped >= 40 ? '#F2B544' : '#FF5252'
 
   return (
     <div className="relative bg-white/10 rounded-2xl p-4 backdrop-blur-sm border border-white/15 overflow-hidden">

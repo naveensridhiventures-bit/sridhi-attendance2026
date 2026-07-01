@@ -47,8 +47,8 @@ export default function Home() {
           <div className="flex items-center gap-3 mb-3">
             <img src="/logo.png" alt="Sridhi" className="w-12 h-12 rounded-2xl bg-white object-contain p-1.5 shadow-lg animate-breatheGlow" />
             <div className="min-w-0">
-              <p className="text-white font-display font-bold text-lg leading-tight">Sridhi.</p>
-              <p className="text-brand-100 text-xs">Attendance & Workforce Management</p>
+              <p className="text-white font-display font-bold text-base leading-tight">Sridhi Battery Co.</p>
+              <p className="text-brand-100 text-[11px]">Attendance & Workforce Management</p>
             </div>
             <DarkModeToggle className="ml-auto" />
           </div>
