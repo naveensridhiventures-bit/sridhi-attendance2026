@@ -79,7 +79,47 @@ function doPost(e) {
   }
 }
 
-function doGet() {
+function doGet(e) {
+  // Handle API calls via GET (avoids CORS preflight from browser)
+  if (e && e.parameter && e.parameter.action) {
+    let body = {}
+    try {
+      body = e.parameter.payload ? JSON.parse(e.parameter.payload) : {}
+    } catch (_) { body = {} }
+    body.action = e.parameter.action
+
+    try {
+      ensureMonthlyTabs()
+      const a = body.action
+      if (a === 'getEmployees')          return json(getEmployees(body.type))
+      if (a === 'getAllEmployeesFull')    return json(getAllEmployeesFull())
+      if (a === 'addEmployee')           return json(addEmployee(body.employee))
+      if (a === 'updateEmployee')        return json(updateEmployee(body.employeeId, body.updates))
+      if (a === 'updateSalary')          return json(updateSalary(body.employeeId, body.salary))
+      if (a === 'getEmployeeById')       return json(getEmployeeById(body.employeeId))
+      if (a === 'markAttendance')        return json(markAttendance(body))
+      if (a === 'getTodaySummary')       return json(getTodaySummary())
+      if (a === 'getMonthlyAttendance')  return json(getMonthlyAttendance(body.employeeId, body.year, body.month))
+      if (a === 'getAttendanceHistory')  return json(getAttendanceHistory(body.employeeId))
+      if (a === 'getMonthlySalary')      return json(getMonthlySalary(body.year, body.month))
+      if (a === 'getEmployeeSalary')     return json(getEmployeeSalary(body.employeeId, body.year, body.month))
+      if (a === 'dashboardLogin')        return json(dashboardLogin(body.employeeId, body.password))
+      if (a === 'applyLeave')            return json(applyLeave(body.request))
+      if (a === 'getLeaveRequests')      return json(getLeaveRequests(body.employeeId))
+      if (a === 'getAllLeaveRequests')    return json(getAllLeaveRequests(body.status))
+      if (a === 'updateLeaveStatus')     return json(updateLeaveStatus(body.requestId, body.status, body.remarks))
+      if (a === 'getHeroImage')          return json(getHeroImage())
+      if (a === 'setHeroImage')          return json(setHeroImage(body.imageUrl, body.caption))
+      if (a === 'getAnnouncement')       return json(getAnnouncement())
+      if (a === 'setAnnouncement')       return json(setAnnouncement(body.message, body.type, body.authorName))
+      if (a === 'clearAnnouncement')     return json(clearAnnouncement())
+      if (a === 'getMonthlyTabsList')    return json(getMonthlyTabsList())
+      return json({ success: false, message: 'Unknown action: ' + a })
+    } catch (err) {
+      return json({ success: false, message: err.message })
+    }
+  }
+  // Health check
   return ContentService.createTextOutput('Sridhi Battery Co. Attendance API v2 — OK').setMimeType(ContentService.MimeType.TEXT)
 }
 
