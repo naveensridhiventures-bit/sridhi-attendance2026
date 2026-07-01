@@ -8,7 +8,7 @@ export default function Footer() {
         <path d="M22 10v4" strokeLinecap="round" />
         <path d="M6 10v4M10 10v4" strokeLinecap="round" className="text-brand-400" stroke="currentColor" />
       </svg>
-      Powered by <span className="font-semibold text-brand-600">Sridhi Battery Co.</span>
+      Powered by <span className="font-semibold text-brand-600">Sridhi Attendace.</span>
     </div>
   )
 }
