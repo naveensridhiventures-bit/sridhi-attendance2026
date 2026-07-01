@@ -74,7 +74,7 @@ export default function InstallPrompt() {
   return (
     <div className="fixed bottom-28 inset-x-0 z-50 px-4 animate-toastIn">
       <div className="max-w-md mx-auto bg-ink rounded-3xl p-4 shadow-2xl border border-brand-600/30 flex items-center gap-3">
-        <img src="/icons/icon-192.png" alt="Sridhi" className="w-14 h-14 rounded-2xl shrink-0 shadow-lg" />
+        <img src="/icons/icon-192-v2.png" alt="Sridhi" className="w-14 h-14 rounded-2xl shrink-0 shadow-lg" />
 
         <div className="flex-1 min-w-0">
           <p className="font-display font-bold text-white text-sm">Install Sridhi Attendance</p>
