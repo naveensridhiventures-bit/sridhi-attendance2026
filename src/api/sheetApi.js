@@ -2,7 +2,7 @@
 // JSONP approach — bypasses CORS completely for Google Apps Script.
 // No fetch() used — injects a <script> tag instead, which browsers allow cross-origin.
 
-const WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbyyT6Grmfm7OKj90MkNGhk4d5ibEhrdcqvUxaHGnMagc7H7VnikS_X4vbTFg-_eNs74/exec'
+const WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbzhTFOwqu8vO3PRkpsoDBJDVG48PJH9VQG99FG9F78MHIF_t35mAT4poCOZBOZRxwNO/exec'
 
 function callApi(action, payload = {}) {
   return new Promise((resolve, reject) => {
@@ -26,7 +26,7 @@ function callApi(action, payload = {}) {
     window[cbName] = (data) => {
       cleanup()
       if (data && data.success === false) {
-        reject(new Error(data.message || 'Request failed'))
+        reject(new Error(data.message || 'Request failed'))notepad package.json
       } else {
         resolve(data)
       }
