@@ -44,7 +44,7 @@ button:active, a:active {
   mask-image: linear-gradient(90deg, transparent 0, #000 6%, #000 94%, transparent 100%);
 }
 
-/* Battery-charge style skeleton loader */
+/* Charge-style skeleton loader */
 .skeleton {
   position: relative;
   background: #EFFBF2;
@@ -74,7 +74,7 @@ button:active, a:active {
   border: 1px solid rgba(255,255,255,0.25);
 }
 
-/* Battery-cell watermark texture for cards */
+/* Cell-pattern watermark texture for cards */
 .cell-pattern {
   background-image: repeating-linear-gradient(
     90deg,

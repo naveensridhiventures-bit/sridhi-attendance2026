@@ -20,7 +20,7 @@ export default function Splash({ onDone }) {
     >
       <img src="/logo.png" alt="Sridhi" className="w-20 h-20 rounded-3xl bg-white object-contain p-3 shadow-2xl animate-splashZoom" />
       <p className="text-white font-display font-bold text-lg mt-4 animate-fadeUp" style={{ animationDelay: '200ms' }}>
-        Sridhi Battery Co.
+        Sridhi Ventures
       </p>
       <p className="text-brand-100 text-xs mt-1 animate-fadeUp" style={{ animationDelay: '300ms' }}>
         Attendance & Workforce Management

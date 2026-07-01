@@ -83,3 +83,6 @@ export const updateSalary         = (employeeId, salary)         => callApi('upd
 export const getMonthlySalary     = (year, month)                => callApi('getMonthlySalary', { year, month })
 export const getEmployeeSalary    = (employeeId, year, month)    => callApi('getEmployeeSalary', { employeeId, year, month })
 export const getMonthlyTabsList   = ()                           => callApi('getMonthlyTabsList')
+
+// ---------- Logs (every attendance mark, name/role/location/date/time) ----------
+export const getLogs              = (limit, employeeId)          => callApi('getLogs', { limit, employeeId })

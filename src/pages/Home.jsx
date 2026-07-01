@@ -4,7 +4,7 @@ import { getTodaySummary } from '../api/sheetApi.js'
 import MarqueeBanner from '../components/MarqueeBanner.jsx'
 import DragonFly from '../components/DragonFly.jsx'
 import EnergyParticles from '../components/EnergyParticles.jsx'
-import EnergyGauge from '../components/EnergyGauge.jsx'
+import AttendanceRing from '../components/AttendanceRing.jsx'
 import DarkModeToggle from '../components/DarkModeToggle.jsx'
 import CountUp from '../components/CountUp.jsx'
 import DonutChart from '../components/DonutChart.jsx'
@@ -47,7 +47,7 @@ export default function Home() {
           <div className="flex items-center gap-3 mb-3">
             <img src="/logo.png" alt="Sridhi" className="w-12 h-12 rounded-2xl bg-white object-contain p-1.5 shadow-lg animate-breatheGlow" />
             <div className="min-w-0">
-              <p className="text-white font-display font-bold text-base leading-tight">Sridhi Battery Co.</p>
+              <p className="text-white font-display font-bold text-base leading-tight">Sridhi Ventures</p>
               <p className="text-brand-100 text-[11px]">Attendance & Workforce Management</p>
             </div>
             <DarkModeToggle className="ml-auto" />
@@ -61,7 +61,7 @@ export default function Home() {
 
           {summary && (
             <div className="mt-5">
-              <EnergyGauge
+              <AttendanceRing
                 percent={
                   summary.officeTotal + summary.productionTotal > 0
                     ? Math.round(((summary.officePresent + summary.productionPresent) / (summary.officeTotal + summary.productionTotal)) * 100)
