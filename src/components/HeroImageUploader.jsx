@@ -6,11 +6,14 @@ import { useToast } from './Toast.jsx'
 // 1. Go to https://cloudinary.com → Settings → Upload → Upload presets
 //    Create an UNSIGNED preset and paste the name below.
 // 2. Find your Cloud Name on the Cloudinary dashboard top-left.
-const CLOUD_NAME  = 'djwgtjdda'   // e.g. 'dxyz123ab'
-const UPLOAD_PRESET = 'sridhi-hero' // e.g. 'sridhi_hero'
+const CLOUD_NAME  = 'djwgtjdda'   // your real Cloudinary Cloud Name
+const UPLOAD_PRESET = 'sridhi-hero' // your real unsigned upload preset
 // ──────────────────────────────────────────────────────────────────────────────
 
-const isConfigured = CLOUD_NAME !== 'ACCOUNTANT APP' && UPLOAD_PRESET !== 'sridhi-hero'
+// Just checks both values were actually filled in — no longer compares
+// against specific placeholder text, which is what caused the button to
+// stay disabled even after real credentials were pasted in above.
+const isConfigured = Boolean(CLOUD_NAME && CLOUD_NAME.trim()) && Boolean(UPLOAD_PRESET && UPLOAD_PRESET.trim())
 
 export default function HeroImageUploader() {
   const showToast = useToast()
