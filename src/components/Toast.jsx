@@ -7,7 +7,13 @@ export function ToastProvider({ children }) {
 
   const showToast = useCallback((message, type = 'success') => {
     const id = Date.now() + Math.random()
-    setToasts((t) => [...t, { id, message, type }])
+    setToasts((t) => {
+      // Don't stack an identical message that's already showing —
+      // this is what caused the same error to repeat 4x on screen
+      // when a button was tapped more than once.
+      if (t.some((x) => x.message === message && x.type === type)) return t
+      return [...t, { id, message, type }]
+    })
     setTimeout(() => {
       setToasts((t) => t.filter((x) => x.id !== id))
     }, 3200)

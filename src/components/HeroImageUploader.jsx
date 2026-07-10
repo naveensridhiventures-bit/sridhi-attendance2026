@@ -10,6 +10,8 @@ const CLOUD_NAME  = 'REPLACE_YOUR_CLOUD_NAME'   // e.g. 'dxyz123ab'
 const UPLOAD_PRESET = 'REPLACE_YOUR_UPLOAD_PRESET' // e.g. 'sridhi_hero'
 // ──────────────────────────────────────────────────────────────────────────────
 
+const isConfigured = CLOUD_NAME !== 'REPLACE_YOUR_CLOUD_NAME' && UPLOAD_PRESET !== 'REPLACE_YOUR_UPLOAD_PRESET'
+
 export default function HeroImageUploader() {
   const showToast = useToast()
   const [current, setCurrent] = useState(null)   // { imageUrl, caption, updatedAt }
@@ -41,8 +43,8 @@ export default function HeroImageUploader() {
       showToast('Please choose an image first.', 'error')
       return
     }
-    if (CLOUD_NAME === 'REPLACE_YOUR_CLOUD_NAME') {
-      showToast('Set CLOUD_NAME and UPLOAD_PRESET in HeroImageUploader.jsx first.', 'error')
+    if (CLOUD_NAME === 'REPLACE_YOUR_CLOUD_NAME' || UPLOAD_PRESET === 'REPLACE_YOUR_UPLOAD_PRESET') {
+      showToast('Hero image upload isn\'t set up yet — add your Cloudinary Cloud Name and Upload Preset in HeroImageUploader.jsx.', 'error')
       return
     }
     setUploading(true)
@@ -121,6 +123,12 @@ export default function HeroImageUploader() {
         </div>
       )}
 
+      {!isConfigured && (
+        <div className="rounded-xl bg-gold-50 border border-gold-200 px-3 py-2.5 text-[11px] text-gold-800 leading-relaxed">
+          <strong>One-time setup needed:</strong> create a free Cloudinary account, then paste your Cloud Name and an unsigned Upload Preset into <code>CLOUD_NAME</code> / <code>UPLOAD_PRESET</code> at the top of <code>HeroImageUploader.jsx</code>. Until then this upload button is disabled.
+        </div>
+      )}
+
       {/* Upload new */}
       <div className="space-y-2.5">
         <label className="block cursor-pointer">
@@ -148,8 +156,8 @@ export default function HeroImageUploader() {
           className="input text-sm"
         />
 
-        <button onClick={handleUpload} disabled={uploading} className="w-full btn-primary py-3 text-sm">
-          {uploading ? (
+        <button onClick={handleUpload} disabled={uploading || !isConfigured} className="w-full btn-primary py-3 text-sm">
+          {!isConfigured ? 'Upload disabled — finish setup above' : uploading ? (
             <span className="flex items-center justify-center gap-2">
               <svg className="animate-spin w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" strokeLinecap="round" /></svg>
               Uploading to Cloudinary…

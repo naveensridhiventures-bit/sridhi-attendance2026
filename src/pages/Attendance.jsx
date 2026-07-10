@@ -7,14 +7,9 @@ import Confetti from '../components/Confetti.jsx'
 import { getHeroImage } from '../api/sheetApi.js'
 import { useToast } from '../components/Toast.jsx'
 import { haptics } from '../utils/haptics.js'
-
-const STATUS_OPTIONS = [
-  { key: 'present', label: 'P', full: 'Present', color: 'from-brand-400 to-brand-600' },
-  { key: 'absent', label: 'A', full: 'Absent', color: 'from-rust to-red-700' },
-  { key: 'weekoff', label: 'WO', full: 'Week Off', color: 'from-gold-400 to-gold-500' },
-  { key: 'wop', label: 'WOP', full: 'Worked on WO', color: 'from-sky-400 to-sky-600' },
-  { key: 'na', label: 'NA', full: 'Not Available', color: 'from-slate-400 to-slate-500' }
-]
+import { STATUS_OPTIONS, getStatusMeta } from '../utils/attendanceStatus.js'
+import EmployeePicker from '../components/EmployeePicker.jsx'
+import BulkAttendance from '../components/BulkAttendance.jsx'
 
 const REASONS = ['Personal Work', 'Medical / Health', 'Family Emergency', 'Bank / Govt Work', 'Vehicle Issue', 'Other']
 const HOURS = ['30m', '1 HR', '2 HRS', '3 HRS', '4 HRS']
@@ -27,6 +22,7 @@ export default function Attendance() {
   const [employees, setEmployees] = useState([])
   const [loading, setLoading] = useState(true)
   const [marked, setMarked] = useState({})
+  const [justMarked, setJustMarked] = useState([]) // employeeIds marked in this session, for the "✓ Just marked" badge
 
   // single-employee marking flow (mirrors the live attendance form)
   const [selectedId, setSelectedId] = useState('')
@@ -101,8 +97,9 @@ export default function Attendance() {
     try {
       await markAttendance({ employeeId: selectedId, status, mode: 'manual', location })
       setMarked((m) => ({ ...m, [selectedId]: status }))
+      setJustMarked((j) => [...j, selectedId])
       const emp = employees.find((e) => e.employeeId === selectedId)
-      const statusLabel = STATUS_OPTIONS.find((s) => s.key === status)?.full
+      const statusLabel = getStatusMeta(status).full
       setToast({ ok: true, message: `${emp?.name || selectedId} marked ${statusLabel}` })
       showToast(`${emp?.name || selectedId} marked ${statusLabel}`, 'success')
       haptics.success()
@@ -193,16 +190,17 @@ export default function Attendance() {
 
       <div className="px-5 -mt-4 max-w-md mx-auto relative z-10 pb-4">
         {/* Mode switch */}
-        <div className="grid grid-cols-3 gap-1.5 mb-4 bg-white p-1.5 rounded-2xl border border-brand-100 shadow-card">
+        <div className="grid grid-cols-4 gap-1.5 mb-4 bg-white p-1.5 rounded-2xl border border-brand-100 shadow-card">
           {[
             { key: 'mark', label: 'Mark' },
+            { key: 'bulk', label: 'Bulk' },
             { key: 'qr', label: 'QR Scan' },
             { key: 'permission', label: 'Permission' }
           ].map((m) => (
             <button
               key={m.key}
               onClick={() => setMode(m.key)}
-              className={`py-2 rounded-xl text-xs font-semibold transition-all ${
+              className={`py-2 rounded-xl text-[11px] font-semibold transition-all ${
                 mode === m.key ? 'bg-brand-500 text-white shadow-soft' : 'text-slate-500'
               }`}
             >
@@ -226,14 +224,13 @@ export default function Attendance() {
           <div className="bg-white rounded-3xl p-5 border border-brand-50 shadow-card animate-popIn space-y-4">
             <div>
               <label className="block text-xs text-slate-500 mb-1.5 font-semibold uppercase tracking-wide">Select Employee</label>
-              <select value={selectedId} onChange={(e) => setSelectedId(e.target.value)} className="input">
-                <option value="">Choose a name…</option>
-                {employees.map((e) => (
-                  <option key={e.employeeId} value={e.employeeId}>
-                    {e.name} {marked[e.employeeId] ? `· already ${marked[e.employeeId]}` : ''}
-                  </option>
-                ))}
-              </select>
+              <EmployeePicker
+                employees={employees}
+                marked={marked}
+                value={selectedId}
+                onChange={setSelectedId}
+                recentIds={justMarked}
+              />
             </div>
 
             <div>
@@ -283,6 +280,18 @@ export default function Attendance() {
           </div>
         )}
 
+        {mode === 'bulk' && (
+          <BulkAttendance
+            employees={employees}
+            marked={marked}
+            setMarked={setMarked}
+            location={location}
+            locStatus={locStatus}
+            captureLocation={captureLocation}
+            onDone={() => setConfettiTrigger((c) => c + 1)}
+          />
+        )}
+
         {mode === 'qr' && (
           <div className="animate-popIn">
             <QRScanner onScan={handleQrScan} paused={qrPaused} />
@@ -313,14 +322,13 @@ export default function Attendance() {
 
             <div>
               <label className="block text-xs text-slate-500 mb-1.5 font-semibold uppercase tracking-wide">Employee Name</label>
-              <select value={permId} onChange={(e) => setPermId(e.target.value)} className="input">
-                <option value="">Choose a name…</option>
-                {employees.map((e) => (
-                  <option key={e.employeeId} value={e.employeeId}>
-                    {e.name}
-                  </option>
-                ))}
-              </select>
+              <EmployeePicker
+                employees={employees}
+                marked={marked}
+                value={permId}
+                onChange={setPermId}
+                recentIds={justMarked}
+              />
             </div>
 
             <div>
