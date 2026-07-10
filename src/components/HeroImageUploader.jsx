@@ -46,7 +46,7 @@ export default function HeroImageUploader() {
       showToast('Please choose an image first.', 'error')
       return
     }
-    if (CLOUD_NAME === 'ACCOUNTANT APP' || UPLOAD_PRESET === 'sridhi-hero') {
+    if (!isConfigured) {
       showToast('Hero image upload isn\'t set up yet — add your Cloudinary Cloud Name and Upload Preset in HeroImageUploader.jsx.', 'error')
       return
     }
