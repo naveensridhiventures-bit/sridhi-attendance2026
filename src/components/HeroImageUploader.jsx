@@ -6,11 +6,11 @@ import { useToast } from './Toast.jsx'
 // 1. Go to https://cloudinary.com → Settings → Upload → Upload presets
 //    Create an UNSIGNED preset and paste the name below.
 // 2. Find your Cloud Name on the Cloudinary dashboard top-left.
-const CLOUD_NAME  = 'ACCOUNTANT APP'   // e.g. 'dxyz123ab'
-const UPLOAD_PRESET = 'sridhi_hero' // e.g. 'sridhi_hero'
+const CLOUD_NAME  = 'djwgtjdda'   // e.g. 'dxyz123ab'
+const UPLOAD_PRESET = 'sridhi-hero' // e.g. 'sridhi_hero'
 // ──────────────────────────────────────────────────────────────────────────────
 
-const isConfigured = CLOUD_NAME !== 'ACCOUNTANT APP' && UPLOAD_PRESET !== 'sridhi_hero'
+const isConfigured = CLOUD_NAME !== 'ACCOUNTANT APP' && UPLOAD_PRESET !== 'sridhi-hero'
 
 export default function HeroImageUploader() {
   const showToast = useToast()
@@ -43,7 +43,7 @@ export default function HeroImageUploader() {
       showToast('Please choose an image first.', 'error')
       return
     }
-    if (CLOUD_NAME === 'ACCOUNTANT APP' || UPLOAD_PRESET === 'sridhi_hero') {
+    if (CLOUD_NAME === 'ACCOUNTANT APP' || UPLOAD_PRESET === 'sridhi-hero') {
       showToast('Hero image upload isn\'t set up yet — add your Cloudinary Cloud Name and Upload Preset in HeroImageUploader.jsx.', 'error')
       return
     }
