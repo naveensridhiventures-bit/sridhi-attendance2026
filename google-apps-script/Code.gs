@@ -245,7 +245,7 @@ function createSalaryTab_(ss, year, month) {
   const sh = ss.insertSheet(salTabName(year, month))
   const headers = ['S.No','Employee Name','Monthly Salary','Advance','Total Days',
     'P Count','A Count','WO Count','WOP Count','Paid Days',
-    'Per Day Salary','Gross Salary','Net Salary','Warning']
+    'Per Day Salary','Gross Salary','Net Salary','Warning','NA Count']
   sh.appendRow(headers)
   sh.setFrozenRows(1)
   formatHeader_(sh, headers.length)
@@ -260,7 +260,7 @@ function createSalaryTab_(ss, year, month) {
         const workDays = workingDaysInMonth(year, month)
         const perDay = workDays > 0 ? monthly / workDays : 0
         sh.appendRow([idx + 1, e.Name, monthly, 0, workDays, 0, 0, 0, 0, 0,
-          perDay, 0, 0, 'OK'])
+          perDay, 0, 0, 'OK', 0])
       })
     }
   }
@@ -768,6 +768,13 @@ function syncSalarySheet_(year, month) {
   const attSh = getSS().getSheetByName(attTabName(year, month))
   if (!salSh || !attSh) return
 
+  // Self-heal: older salary tabs created before the "NA Count" column existed
+  // won't have it — add it so every month's data stays complete and consistent.
+  if (String(salSh.getRange(1, 15).getValue() || '') !== 'NA Count') {
+    salSh.getRange(1, 15).setValue('NA Count')
+    formatHeader_(salSh, 15)
+  }
+
   const attVals = attSh.getDataRange().getValues()
   const attHeaders = attVals[0]
   const workDays = workingDaysInMonth(year, month)
@@ -809,23 +816,69 @@ function syncSalarySheet_(year, month) {
     salSh.getRange(i + 1, 12).setValue(gross)      // Gross Salary
     salSh.getRange(i + 1, 13).setValue(net)        // Net Salary
     salSh.getRange(i + 1, 14).setValue(warning)    // Warning
+    salSh.getRange(i + 1, 15).setValue(t.NA)       // NA Count
   }
 }
 
 function getMonthlySalary(year, month) {
+  const ym = currentYM()
+  // Only re-sync the current month against live attendance so numbers reflect
+  // today's marks. Past months stay as finalized (no attendance sheet keeps
+  // changing there, and it avoids re-writing closed-out payroll history).
+  if (year === ym.year && month === ym.month) {
+    syncSalarySheet_(year, month)
+  }
+
   const sh = getSS().getSheetByName(salTabName(year, month))
   if (!sh) return { success: true, rows: [] }
   const vals = sh.getDataRange().getValues()
   if (vals.length < 2) return { success: true, rows: [] }
-  return { success: true, rows: rows2obj_(vals) }
+
+  // Join with Employees sheet so the UI can show EmployeeID / Type per worker
+  const empSh = getEmpSheet()
+  const empMap = {}
+  if (empSh) {
+    const empVals = empSh.getDataRange().getValues()
+    if (empVals.length >= 2) {
+      rows2obj_(empVals).forEach(e => {
+        empMap[String(e.Name || '').toLowerCase().trim()] = {
+          employeeId: String(e.EmployeeID || ''),
+          type: e.Type || ''
+        }
+      })
+    }
+  }
+
+  const rows = rows2obj_(vals).map(r => {
+    const meta = empMap[String(r['Employee Name'] || '').toLowerCase().trim()] || { employeeId: '', type: '' }
+    return {
+      Name: r['Employee Name'],
+      EmployeeID: meta.employeeId,
+      Type: meta.type,
+      MonthlySalary: parseFloat(r['Monthly Salary']) || 0,
+      EarnedSalary: parseFloat(r['Gross Salary']) || 0,
+      Deduction: parseFloat(r['Advance']) || 0,
+      FinalSalary: parseFloat(r['Net Salary']) || 0,
+      Present: r['P Count'] || 0,
+      Absent: r['A Count'] || 0,
+      WeekOff: r['WO Count'] || 0,
+      WOP: r['WOP Count'] || 0,
+      NA: r['NA Count'] || 0,
+      TotalDays: r['Total Days'] || 0,
+      PaidDays: r['Paid Days'] || 0,
+      PerDaySalary: parseFloat(r['Per Day Salary']) || 0,
+      Warning: r['Warning'] || ''
+    }
+  })
+
+  return { success: true, rows }
 }
 
 function getEmployeeSalary(employeeId, year, month) {
   const empRes = getEmployeeById(employeeId)
   if (!empRes.success) return { success: true, salary: null }
-  const empName = empRes.employee.name.toLowerCase().trim()
   const res = getMonthlySalary(year, month)
-  const row = (res.rows || []).find(r => String(r['Employee Name'] || '').toLowerCase().trim() === empName)
+  const row = (res.rows || []).find(r => String(r.EmployeeID) === String(employeeId))
   return { success: true, salary: row || null }
 }
 

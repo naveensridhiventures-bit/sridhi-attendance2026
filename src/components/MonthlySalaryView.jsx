@@ -28,6 +28,7 @@ export default function MonthlySalaryView() {
   }
 
   const label = MONTHS[month - 1] + '-' + year
+  const isCurrentMonth = year === now.getFullYear() && month === now.getMonth() + 1
   const filtered = rows.filter(r =>
     (r.Name || '').toLowerCase().includes(search.toLowerCase()) ||
     (r.EmployeeID || '').toLowerCase().includes(search.toLowerCase())
@@ -82,7 +83,15 @@ export default function MonthlySalaryView() {
         <div className="rounded-2xl bg-gradient-to-br from-brand-600 to-brand-800 p-4 cell-pattern shadow-soft">
           <p className="text-brand-100 text-xs mb-1">Total Payroll · {label}</p>
           <p className="font-display font-bold text-white text-2xl">₹{totalPayroll.toLocaleString('en-IN')}</p>
-          <p className="text-brand-200 text-[11px] mt-1">{filtered.length} employees</p>
+          <div className="flex items-center justify-between mt-1">
+            <p className="text-brand-200 text-[11px]">{filtered.length} employees</p>
+            {isCurrentMonth && (
+              <p className="text-brand-200 text-[10px] flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block"></span>
+                Live · updates as attendance is marked
+              </p>
+            )}
+          </div>
         </div>
       )}
 
@@ -109,7 +118,12 @@ export default function MonthlySalaryView() {
           <div key={i} className="bg-white border border-brand-50 rounded-2xl p-3.5 shadow-card animate-fadeUp" style={{ animationDelay: `${i*25}ms` }}>
             <div className="flex items-start justify-between mb-2">
               <div>
-                <p className="font-medium text-sm text-ink">{r.Name}</p>
+                <p className="font-medium text-sm text-ink flex items-center gap-1.5">
+                  {r.Name}
+                  {r.Warning === 'EXCESS ABSENT' && (
+                    <span className="text-[9px] font-semibold text-rust bg-rust/10 px-1.5 py-0.5 rounded-full">⚠ Excess Absent</span>
+                  )}
+                </p>
                 <p className="text-[11px] text-slate-400">{r.EmployeeID} · <span className="capitalize">{r.Type}</span></p>
               </div>
               <div className="text-right">
