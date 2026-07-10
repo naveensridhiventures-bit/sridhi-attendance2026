@@ -6,6 +6,7 @@ import HeroImageUploader from '../components/HeroImageUploader.jsx'
 import MessageComposer from '../components/MessageComposer.jsx'
 import MonthlySalaryView from '../components/MonthlySalaryView.jsx'
 import LogsView from '../components/LogsView.jsx'
+import AbsenteeWhatsApp from '../components/AbsenteeWhatsApp.jsx'
 
 export default function HRDashboard() {
   const showToast = useToast()
@@ -100,13 +101,14 @@ export default function HRDashboard() {
         </button>
       </header>
 
-      <div className="grid grid-cols-5 gap-1.5 mb-5 bg-white p-1.5 rounded-2xl border border-brand-100 shadow-card">
+      <div className="grid grid-cols-3 gap-1.5 mb-5 bg-white p-1.5 rounded-2xl border border-brand-100 shadow-card">
         {[
-          { key: 'salary', label: 'Salary', icon: '₹' },
-          { key: 'leave',  label: 'Leave',  icon: '📋' },
-          { key: 'logs',   label: 'Logs',   icon: '🕒' },
-          { key: 'hero',   label: 'Hero',   icon: '🖼' },
-          { key: 'msg',    label: 'Message', icon: '📣' }
+          { key: 'salary',   label: 'Salary',   icon: '₹' },
+          { key: 'leave',    label: 'Leave',    icon: '📋' },
+          { key: 'logs',     label: 'Logs',     icon: '🕒' },
+          { key: 'hero',     label: 'Hero',     icon: '🖼' },
+          { key: 'msg',      label: 'Message',  icon: '📣' },
+          { key: 'absent',   label: 'Absent',   icon: '📲' }
         ].map((t) => (
           <button
             key={t.key}
@@ -224,6 +226,12 @@ export default function HRDashboard() {
       {tab === 'msg' && (
         <div className="animate-popIn">
           <MessageComposer hrName={employee?.name} />
+        </div>
+      )}
+
+      {tab === 'absent' && (
+        <div className="animate-popIn">
+          <AbsenteeWhatsApp />
         </div>
       )}
     </div>

@@ -101,6 +101,9 @@ function route_(body) {
   if (a === 'setAnnouncement')       return setAnnouncement(body.message, body.type, body.authorName)
   if (a === 'clearAnnouncement')     return clearAnnouncement()
   if (a === 'getMonthlyTabsList')    return getMonthlyTabsList()
+  if (a === 'getAbsenteesToday')     return getAbsenteesToday()
+  if (a === 'getHrWhatsappNumber')   return getHrWhatsappNumber()
+  if (a === 'setHrWhatsappNumber')   return setHrWhatsappNumber(body.number)
   return { success: false, message: 'Unknown action: ' + a }
 }
 
@@ -631,6 +634,56 @@ function getTodaySummary() {
     productionAbsent: Math.max(productionTotal - productionPresent, 0)
   }
 }
+
+// ─── Absentee WhatsApp Alerts ──────────────────────────────────────────────
+
+function getAbsenteesToday() {
+  const ym = currentYM()
+  const empSh = getEmpSheet()
+  const empVals = empSh ? empSh.getDataRange().getValues() : [[]]
+  const employees = empVals.length > 1 ? rows2obj_(empVals) : []
+
+  const sh = getSS().getSheetByName(attTabName(ym.year, ym.month))
+  const todayLabel = dateColLabel(new Date())
+  const statusMap = {}
+
+  if (sh) {
+    const vals = sh.getDataRange().getValues()
+    if (vals.length > 1) {
+      const dateColIdx = vals[0].indexOf(todayLabel)
+      if (dateColIdx > -1) {
+        vals.slice(1).forEach(row => {
+          const name = String(row[1]).toLowerCase().trim()
+          statusMap[name] = String(row[dateColIdx] || '').toUpperCase()
+        })
+      }
+    }
+  }
+
+  const absentees = employees
+    .map(e => {
+      const status = statusMap[String(e.Name || '').toLowerCase().trim()] || ''
+      return {
+        employeeId: String(e.EmployeeID), name: e.Name, phone: e.Phone || '',
+        type: e.Type, status: status, statusLabel: status === 'A' ? 'Marked Absent' : 'Not Checked In'
+      }
+    })
+    .filter(e => e.status === 'A' || e.status === '')
+
+  return { success: true, date: todayStr(), absentees, count: absentees.length }
+}
+
+function getHrWhatsappNumber() {
+  const row = settingsGet('hrWhatsappNumber')
+  return { success: true, number: row ? row.value : '' }
+}
+
+function setHrWhatsappNumber(number) {
+  settingsSet('hrWhatsappNumber', number || '', '')
+  return { success: true }
+}
+
+// ─────────────────────────────────────────────────────────────────────────
 
 function getMonthlyAttendance(employeeId, year, month) {
   const empRes = getEmployeeById(employeeId)

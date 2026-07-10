@@ -86,3 +86,8 @@ export const getMonthlyTabsList   = ()                           => callApi('get
 
 // ---------- Logs (every attendance mark, name/role/location/date/time) ----------
 export const getLogs              = (limit, employeeId)          => callApi('getLogs', { limit, employeeId })
+
+// ---------- Absentee WhatsApp Alerts ----------
+export const getAbsenteesToday    = ()                           => callApi('getAbsenteesToday')
+export const getHrWhatsappNumber  = ()                           => callApi('getHrWhatsappNumber')
+export const setHrWhatsappNumber  = (number)                     => callApi('setHrWhatsappNumber', { number })
