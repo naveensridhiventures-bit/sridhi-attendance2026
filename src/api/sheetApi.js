@@ -2,7 +2,7 @@
 // JSONP approach — bypasses CORS completely for Google Apps Script.
 // No fetch() used — injects a <script> tag instead, which browsers allow cross-origin.
 
-const WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbwjZhlPyUHB7zVsVzIKrJJbGF5fyFWu7kOSA23f5Cucvbzc2NxfsAGjl4myUiz4J_vW/exec'
+const WEB_APP_URL = 'https://script.google.com/macros/s/AKfycby7v-PQ7vO0zZ6zx_YD-il0Ne_43grUMSwJvO0UrhzQKi5AUHbV3UUdX36qnM3RPveE/exec'
 
 function callApi(action, payload = {}) {
   return new Promise((resolve, reject) => {
