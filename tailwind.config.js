@@ -179,6 +179,39 @@ export default {
           '0%, 100%': { transform: 'translateY(0) scale(1)' },
           '40%': { transform: 'translateY(-4px) scale(1.08)' },
           '60%': { transform: 'translateY(-2px) scale(1.04)' }
+        },
+        dragonFloat: {
+          '0%, 100%': { transform: 'translateY(0) rotate(0deg)' },
+          '50%': { transform: 'translateY(-9px) rotate(0.6deg)' }
+        },
+        bodyRipple: {
+          '0%, 100%': { transform: 'translateY(0) scaleY(1)' },
+          '50%': { transform: 'translateY(var(--wy, -6px)) scaleY(1.05)' }
+        },
+        finSway: {
+          '0%, 100%': { transform: 'rotate(-4deg)' },
+          '50%': { transform: 'rotate(5deg)' }
+        },
+        whiskerSway: {
+          '0%, 100%': { transform: 'rotate(-8deg)' },
+          '50%': { transform: 'rotate(9deg)' }
+        },
+        eyeGlowPulse: {
+          '0%, 100%': { opacity: 0.75, transform: 'scale(1)' },
+          '50%': { opacity: 1, transform: 'scale(1.3)' }
+        },
+        maneGlow: {
+          '0%, 100%': { opacity: 0.55 },
+          '50%': { opacity: 1 }
+        },
+        mistDrift: {
+          '0%': { transform: 'translate(0, 0) scale(1)', opacity: 0.5 },
+          '50%': { transform: 'translate(10px, -6px) scale(1.08)', opacity: 0.75 },
+          '100%': { transform: 'translate(0, 0) scale(1)', opacity: 0.5 }
+        },
+        emberFloat: {
+          '0%': { transform: 'translate(0,0) scale(1)', opacity: 0.9 },
+          '100%': { transform: 'translate(var(--ex, 12px), var(--ey, -60px)) scale(0.2)', opacity: 0 }
         }
       },
       animation: {
@@ -214,7 +247,15 @@ export default {
         avatarGlow: 'avatarGlow 2.8s ease-in-out infinite',
         ringSpin: 'ringSpin 12s linear infinite',
         shimmerStreak: 'shimmerStreak 4s ease-in-out infinite',
-        iconBounce: 'iconBounce 2.5s ease-in-out infinite'
+        iconBounce: 'iconBounce 2.5s ease-in-out infinite',
+        dragonFloat: 'dragonFloat 7s ease-in-out infinite',
+        bodyRipple: 'bodyRipple 3.2s ease-in-out infinite',
+        finSway: 'finSway 3.2s ease-in-out infinite',
+        whiskerSway: 'whiskerSway 4.5s ease-in-out infinite',
+        eyeGlowPulse: 'eyeGlowPulse 2.2s ease-in-out infinite',
+        maneGlow: 'maneGlow 2.8s ease-in-out infinite',
+        mistDrift: 'mistDrift 6s ease-in-out infinite',
+        emberFloat: 'emberFloat 2.4s ease-out infinite'
       }
     }
   },

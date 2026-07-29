@@ -2,8 +2,6 @@ import React, { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { getTodaySummary } from '../api/sheetApi.js'
 import MarqueeBanner from '../components/MarqueeBanner.jsx'
-import DragonFly from '../components/DragonFly.jsx'
-import EnergyParticles from '../components/EnergyParticles.jsx'
 import AttendanceRing from '../components/AttendanceRing.jsx'
 import DarkModeToggle from '../components/DarkModeToggle.jsx'
 import CountUp from '../components/CountUp.jsx'
@@ -38,11 +36,20 @@ export default function Home() {
 
   return (
     <div>
-      <div className="aurora-bg rounded-b-[2rem] px-5 pt-8 pb-10 shadow-soft relative overflow-hidden">
-        <EnergyParticles />
-        <DragonFly size={480} top="-10%" duration={24} />
-        <div className="absolute -right-10 -top-10 w-40 h-40 rounded-full bg-white/10" />
-        <div className="absolute -left-6 bottom-0 w-24 h-24 rounded-full bg-white/10" />
+      <div className="rounded-b-[2rem] px-5 pt-8 pb-10 shadow-soft relative overflow-hidden bg-brand-800">
+        <video
+          className="absolute inset-0 w-full h-full object-cover"
+          src="/dragon-bg.mp4"
+          poster="/dragon-bg-poster.jpg"
+          autoPlay
+          loop
+          muted
+          playsInline
+          preload="auto"
+        />
+        {/* Legibility overlays: darken left/bottom for text, let the dragon breathe top-right */}
+        <div className="absolute inset-0 bg-gradient-to-br from-ink/80 via-ink/35 to-transparent" />
+        <div className="absolute inset-x-0 bottom-0 h-28 bg-gradient-to-t from-brand-900/90 to-transparent" />
         <div className="relative max-w-md mx-auto animate-fadeUp">
           <div className="flex items-center gap-3 mb-3">
             <img src="/logo.png" alt="Sridhi" className="w-12 h-12 rounded-2xl bg-white object-contain p-1.5 shadow-lg animate-breatheGlow" />
