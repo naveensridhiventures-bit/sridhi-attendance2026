@@ -14,7 +14,7 @@ export default function Splash({ onDone }) {
 
   return (
     <div
-      className={`fixed inset-0 z-[100] flex flex-col items-center justify-center bg-gradient-to-br from-brand-700 via-brand-600 to-brand-500 transition-opacity duration-300 ${
+      className={`fixed sm:absolute inset-0 z-[100] flex flex-col items-center justify-center bg-gradient-to-br from-brand-700 via-brand-600 to-brand-500 transition-opacity duration-300 ${
         hide ? 'opacity-0 pointer-events-none' : 'opacity-100'
       }`}
     >

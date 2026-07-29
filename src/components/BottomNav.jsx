@@ -49,7 +49,7 @@ const tabs = [
 
 export default function BottomNav() {
   return (
-    <nav className="fixed bottom-0 inset-x-0 z-40 px-4 pb-3 safe-bottom pointer-events-none">
+    <nav className="fixed sm:absolute bottom-0 inset-x-0 z-40 px-4 pb-3 safe-bottom pointer-events-none">
       <div className="max-w-md mx-auto bg-ink/95 backdrop-blur-xl rounded-[1.75rem] shadow-[0_10px_30px_-6px_rgba(9,61,31,0.55)] border border-white/5 pointer-events-auto">
         <div className="grid grid-cols-4 px-1.5 py-1.5">
           {tabs.map((t) => (
