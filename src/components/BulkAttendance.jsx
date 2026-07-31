@@ -1,14 +1,16 @@
 import React, { useMemo, useState } from 'react'
-import { markAttendance } from '../api/sheetApi.js'
+import { markAttendanceBulk } from '../api/sheetApi.js'
 import { useToast } from './Toast.jsx'
 import { STATUS_OPTIONS, getStatusMeta } from '../utils/attendanceStatus.js'
 import { haptics } from '../utils/haptics.js'
 
 // Lets a supervisor tick many workers at once, pick ONE status, and submit
 // all of them in a single go — instead of repeating the single-employee
-// flow one name at a time. Submissions are sent one-by-one in the
-// background (not in parallel) so the Google Sheet never gets two writes
-// racing each other, which is what used to cause silent errors.
+// flow one name at a time. All selected workers are sent in ONE request,
+// which marks every cell and recalculates the salary sheet exactly once
+// at the end. (Previously this looped one API call per worker, which
+// recalculated the whole salary sheet after every single person — slow
+// enough with a large roster to time out and leave salary looking stale.)
 export default function BulkAttendance({ employees, marked, setMarked, location, locStatus, captureLocation, onDone }) {
   const showToast = useToast()
   const [query, setQuery] = useState('')
@@ -62,22 +64,25 @@ export default function BulkAttendance({ employees, marked, setMarked, location,
     setResults(null)
     setProgress({ done: 0, total: ids.length })
 
-    const okNames = []
-    const failed = []
+    let okNames = []
+    let failed = []
 
-    // Sequential on purpose — avoids concurrent writes to the same
-    // Google Sheet row/column which is what caused stray errors before.
-    for (const id of ids) {
-      const emp = employees.find((e) => e.employeeId === id)
-      try {
-        await markAttendance({ employeeId: id, status, mode: 'manual', location })
-        okNames.push(emp?.name || id)
-        setMarked((m) => ({ ...m, [id]: status }))
-      } catch (e) {
-        failed.push({ name: emp?.name || id, message: e.message })
-      } finally {
-        setProgress((p) => ({ ...p, done: p.done + 1 }))
-      }
+    try {
+      const entries = ids.map((id) => ({ employeeId: id, status }))
+      const res = await markAttendanceBulk({ entries, mode: 'manual', location })
+      okNames = res.marked || []
+      failed = (res.failed || []).map((f) => ({
+        name: employees.find((e) => e.employeeId === f.employeeId)?.name || f.employeeId,
+        message: f.message
+      }))
+      setMarked((m) => {
+        const next = { ...m }
+        ids.forEach((id) => { next[id] = status })
+        return next
+      })
+      setProgress({ done: ids.length, total: ids.length })
+    } catch (e) {
+      failed = ids.map((id) => ({ name: employees.find((ee) => ee.employeeId === id)?.name || id, message: e.message }))
     }
 
     setSubmitting(false)
@@ -212,7 +217,7 @@ export default function BulkAttendance({ employees, marked, setMarked, location,
         className="w-full btn-primary py-3.5"
       >
         {submitting ? (
-          <span>Marking {progress.done}/{progress.total}…</span>
+          <span>Marking {progress.total} worker{progress.total === 1 ? '' : 's'}…</span>
         ) : (
           <span className="flex items-center justify-center gap-2">
             <span className={`w-2.5 h-2.5 rounded-full ${meta.dot}`} />
@@ -223,10 +228,7 @@ export default function BulkAttendance({ employees, marked, setMarked, location,
 
       {submitting && (
         <div className="w-full h-1.5 rounded-full bg-brand-50 overflow-hidden">
-          <div
-            className="h-full bg-brand-500 transition-all duration-200"
-            style={{ width: `${progress.total ? (progress.done / progress.total) * 100 : 0}%` }}
-          />
+          <div className="h-full w-1/3 bg-brand-500 animate-pulse rounded-full" />
         </div>
       )}
 

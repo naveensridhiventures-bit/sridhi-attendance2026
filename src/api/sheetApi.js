@@ -4,14 +4,14 @@
 
 const WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbwz8TvtYgbG7dOtukWVfjJU8cRV937iQhv4EmaMT5e8JVruJtRL6RI5SfTBfko1yBMq/exec'
 
-function callApi(action, payload = {}) {
+function callApi(action, payload = {}, timeoutMs = 15000) {
   return new Promise((resolve, reject) => {
     const cbName = '__gs_cb_' + Date.now() + '_' + Math.floor(Math.random() * 99999)
 
     const timeout = setTimeout(() => {
       cleanup()
       reject(new Error('Request timed out — check your internet connection'))
-    }, 15000)
+    }, timeoutMs)
 
     function cleanup() {
       clearTimeout(timeout)
@@ -55,6 +55,8 @@ export const updateEmployee       = (employeeId, updates)        => callApi('upd
 // ---------- Attendance ----------
 export const markAttendance       = ({ employeeId, status, mode, supervisorName, location }) =>
   callApi('markAttendance', { employeeId, status, mode, supervisorName, location })
+export const markAttendanceBulk   = ({ entries, mode, supervisorName, location }) =>
+  callApi('markAttendanceBulk', { entries, mode, supervisorName, location }, 45000)
 export const getTodaySummary      = ()                           => callApi('getTodaySummary')
 export const getAttendanceHistory = (employeeId)                 => callApi('getAttendanceHistory', { employeeId })
 export const getMonthlyAttendance = (employeeId, year, month)    => callApi('getMonthlyAttendance', { employeeId, year, month })

@@ -84,6 +84,7 @@ function route_(body) {
   if (a === 'updateAdvance')         return updateAdvance(body.employeeId, body.advance)
   if (a === 'getEmployeeById')       return getEmployeeById(body.employeeId)
   if (a === 'markAttendance')        return markAttendance(body)
+  if (a === 'markAttendanceBulk')    return markAttendanceBulk(body)
   if (a === 'getTodaySummary')       return getTodaySummary()
   if (a === 'getMonthlyAttendance')  return getMonthlyAttendance(body.employeeId, body.year, body.month)
   if (a === 'getAttendanceHistory')  return getAttendanceHistory(body.employeeId)
@@ -594,6 +595,78 @@ function markAttendance(body) {
   return { success: true, employeeName: emp.name, time: nowTime }
 }
 
+function markAttendanceBulk(body) {
+  const { entries, mode, supervisorName, location } = body
+  if (!entries || !entries.length) return { success: false, message: 'No entries provided' }
+
+  const ym = currentYM()
+  const sh = getSS().getSheetByName(attTabName(ym.year, ym.month))
+  if (!sh) return { success: false, message: 'Attendance sheet not ready' }
+
+  const todayLabel = dateColLabel(new Date())
+  const allVals = sh.getDataRange().getValues()
+  const headers = allVals[0]
+  const dateColIdx = headers.indexOf(todayLabel)
+  if (dateColIdx === -1) return { success: false, message: 'Date column not found: ' + todayLabel }
+
+  // Build a name -> row index map once
+  const nameToRow = {}
+  for (let i = 1; i < allVals.length; i++) {
+    nameToRow[String(allVals[i][1]).toLowerCase().trim()] = i
+  }
+
+  const nowTime = timeStr()
+  const okNames = []
+  const failed = []
+  const logEntries = []
+
+  entries.forEach(entry => {
+    const empRes = getEmployeeById(entry.employeeId)
+    if (!empRes.success) { failed.push({ employeeId: entry.employeeId, message: 'Employee not found' }); return }
+    const emp = empRes.employee
+
+    let rowIdx = nameToRow[emp.name.toLowerCase().trim()]
+    if (rowIdx === undefined) {
+      sh.appendRow([allVals.length, emp.name])
+      rowIdx = sh.getLastRow() - 1
+      nameToRow[emp.name.toLowerCase().trim()] = rowIdx
+    }
+
+    const finalStatus = (entry.status || 'present').toUpperCase()
+    const displayStatus = finalStatus === 'PRESENT' ? 'P' : finalStatus === 'ABSENT' ? 'A' :
+      finalStatus === 'WEEKOFF' ? 'WO' : finalStatus === 'WOP' ? 'WOP' : finalStatus === 'NA' ? 'NA' : finalStatus
+
+    const cell = sh.getRange(rowIdx + 1, dateColIdx + 1)
+    cell.setValue(displayStatus)
+    cell.setBackground(COLORS[displayStatus] || '#FFFFFF')
+    cell.setHorizontalAlignment('center')
+    cell.setFontWeight('bold')
+
+    logEntries.push({
+      date: todayStr(),
+      time: nowTime,
+      employeeId: entry.employeeId,
+      name: emp.name,
+      role: emp.role || '',
+      type: emp.type || '',
+      status: displayStatus,
+      markedBy: mode === 'manual' && supervisorName ? supervisorName : (mode || 'Self'),
+      latitude: location?.lat || '',
+      longitude: location?.lng || '',
+      timestamp: new Date()
+    })
+
+    okNames.push(emp.name)
+  })
+
+  logEntries.forEach(appendAttendanceLog_)
+
+  // Recalculate salary ONCE for the whole batch, not once per employee
+  syncSalarySheet_(ym.year, ym.month)
+
+  return { success: true, marked: okNames, failed: failed, time: nowTime }
+}
+
 function getTodaySummary() {
   const ym = currentYM()
   const empSh = getEmpSheet()
@@ -793,30 +866,32 @@ function syncSalarySheet_(year, month) {
     tally[name] = t
   })
 
-  // Update each employee row in salary sheet
-  for (let i = 1; i < salVals.length; i++) {
-    const name = String(salVals[i][1]).toLowerCase().trim()
-    if (!name) continue
-    const t = tally[name] || { P: 0, A: 0, WO: 0, WOP: 0, NA: 0 }
-    const monthly = parseFloat(salVals[i][2]) || 0
-    const advance = parseFloat(salVals[i][3]) || 0
-    const perDay = workDays > 0 ? monthly / workDays : 0
-    const paidDays = t.P + t.WOP
-    const gross = Math.round(paidDays * perDay)
-    const net = Math.max(gross - advance, 0)
-    const warning = t.A > 3 ? 'EXCESS ABSENT' : 'OK'
+  // Update each employee row in salary sheet — build the whole block in memory
+  // and write it in ONE setValues() call instead of 11 separate .setValue()
+  // calls per row. Per-cell writes for every employee, on every single mark,
+  // is what was making syncs slow enough to time out during bulk marking.
+  const numRows = salVals.length - 1
+  if (numRows > 0) {
+    const block = []
+    const naBlock = []
+    for (let i = 1; i < salVals.length; i++) {
+      const name = String(salVals[i][1]).toLowerCase().trim()
+      const t = tally[name] || { P: 0, A: 0, WO: 0, WOP: 0, NA: 0 }
+      const monthly = parseFloat(salVals[i][2]) || 0
+      const advance = parseFloat(salVals[i][3]) || 0
+      const perDay = workDays > 0 ? monthly / workDays : 0
+      const paidDays = t.P + t.WOP
+      const gross = Math.round(paidDays * perDay)
+      const net = Math.max(gross - advance, 0)
+      const warning = t.A > 3 ? 'EXCESS ABSENT' : 'OK'
 
-    salSh.getRange(i + 1, 5).setValue(workDays)   // Total Days
-    salSh.getRange(i + 1, 6).setValue(t.P)         // P Count
-    salSh.getRange(i + 1, 7).setValue(t.A)         // A Count
-    salSh.getRange(i + 1, 8).setValue(t.WO)        // WO Count
-    salSh.getRange(i + 1, 9).setValue(t.WOP)       // WOP Count
-    salSh.getRange(i + 1, 10).setValue(paidDays)   // Paid Days
-    salSh.getRange(i + 1, 11).setValue(perDay)     // Per Day Salary
-    salSh.getRange(i + 1, 12).setValue(gross)      // Gross Salary
-    salSh.getRange(i + 1, 13).setValue(net)        // Net Salary
-    salSh.getRange(i + 1, 14).setValue(warning)    // Warning
-    salSh.getRange(i + 1, 15).setValue(t.NA)       // NA Count
+      block.push([workDays, t.P, t.A, t.WO, t.WOP, paidDays, perDay, gross, net, warning])
+      naBlock.push([t.NA || 0])
+    }
+    // Columns 5..14 = Total Days, P, A, WO, WOP, Paid Days, Per Day, Gross, Net, Warning
+    salSh.getRange(2, 5, numRows, 10).setValues(block)
+    // Column 15 = NA Count
+    salSh.getRange(2, 15, numRows, 1).setValues(naBlock)
   }
 }
 
