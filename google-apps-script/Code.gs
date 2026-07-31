@@ -851,7 +851,39 @@ function syncSalarySheet_(year, month) {
   const attVals = attSh.getDataRange().getValues()
   const attHeaders = attVals[0]
   const workDays = workingDaysInMonth(year, month)
-  const salVals = salSh.getDataRange().getValues()
+  let salVals = salSh.getDataRange().getValues()
+
+  // Self-heal: add a Salary row for any employee who exists in the Employees
+  // sheet (or already has an Attendance row) but is missing from the Salary
+  // sheet — otherwise sync has nowhere to write their numbers and they stay
+  // blank forever, no matter how many times attendance gets marked.
+  const existingNames = new Set(salVals.slice(1).map(r => String(r[1]).toLowerCase().trim()).filter(Boolean))
+  const empSh = getEmpSheet()
+  const empRoster = empSh ? rows2obj_(empSh.getDataRange().getValues()) : []
+  const empSalaryByName = {}
+  empRoster.forEach(e => { empSalaryByName[String(e.Name || '').toLowerCase().trim()] = parseFloat(e.Salary) || 0 })
+
+  // Anyone in Attendance (or Employees) not yet in Salary
+  const namesNeeded = []
+  attVals.slice(1).forEach(row => {
+    const name = String(row[1]).trim()
+    if (name && !existingNames.has(name.toLowerCase())) { namesNeeded.push(name); existingNames.add(name.toLowerCase()) }
+  })
+  empRoster.forEach(e => {
+    const name = String(e.Name || '').trim()
+    if (name && !existingNames.has(name.toLowerCase())) { namesNeeded.push(name); existingNames.add(name.toLowerCase()) }
+  })
+
+  if (namesNeeded.length) {
+    const startSNo = salVals.length // header counts as row 1, so this is next S.No
+    const newRows = namesNeeded.map((name, idx) => {
+      const monthly = empSalaryByName[name.toLowerCase().trim()] || 0
+      const perDay = workDays > 0 ? monthly / workDays : 0
+      return [startSNo + idx, name, monthly, 0, workDays, 0, 0, 0, 0, 0, perDay, 0, 0, 'OK', 0]
+    })
+    salSh.getRange(salVals.length + 1, 1, newRows.length, 15).setValues(newRows)
+    salVals = salSh.getDataRange().getValues() // re-read so the rest of the sync sees the new rows
+  }
 
   // Build tally from attendance sheet
   const tally = {}
