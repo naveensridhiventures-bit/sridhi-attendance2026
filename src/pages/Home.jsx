@@ -2,7 +2,6 @@ import React, { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { getTodaySummary } from '../api/sheetApi.js'
 import MarqueeBanner from '../components/MarqueeBanner.jsx'
-import AttendanceRing from '../components/AttendanceRing.jsx'
 import DarkModeToggle from '../components/DarkModeToggle.jsx'
 import CountUp from '../components/CountUp.jsx'
 import DonutChart from '../components/DonutChart.jsx'
@@ -65,18 +64,6 @@ export default function Home() {
           </div>
           <p className="text-brand-50 text-sm">{todayStr}</p>
           <h1 className="font-display text-2xl font-bold text-shimmer mt-1">Welcome back</h1>
-
-          {summary && (
-            <div className="mt-5">
-              <AttendanceRing
-                percent={
-                  summary.officeTotal + summary.productionTotal > 0
-                    ? Math.round(((summary.officePresent + summary.productionPresent) / (summary.officeTotal + summary.productionTotal)) * 100)
-                    : 0
-                }
-              />
-            </div>
-          )}
         </div>
       </div>
 
