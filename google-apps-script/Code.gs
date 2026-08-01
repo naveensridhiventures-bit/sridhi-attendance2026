@@ -175,6 +175,21 @@ function dateColLabel(dateObj) {
   return d + '-' + m + '-' + y
 }
 
+// Google Sheets sometimes auto-detects a header string like "01-Aug-26" as
+// an actual date and silently converts the cell to a Date object instead
+// of keeping the literal text. A plain .indexOf(todayLabel) then never
+// matches (Date !== string) and every date-column lookup in this file
+// would fail for that column. This checks both possible forms so it finds
+// the column either way.
+function findDateColIdx_(headerRow, dateObj) {
+  for (let i = 2; i < headerRow.length; i++) {
+    const cell = headerRow[i]
+    const cellLabel = (cell instanceof Date) ? dateColLabel(cell) : String(cell || '').trim()
+    if (cellLabel === label) return i
+  }
+  return -1
+}
+
 function todayStr() {
   return Utilities.formatDate(new Date(), TZ, 'yyyy-MM-dd')
 }
@@ -357,12 +372,11 @@ function getEmployees(type) {
   // today's status from horizontal attendance sheet
   const ym = currentYM()
   const attSh = getSS().getSheetByName(attTabName(ym.year, ym.month))
-  const todayLabel = dateColLabel(new Date())
   const todayRecs = {}
   if (attSh) {
     const av = attSh.getDataRange().getValues()
     if (av.length > 1) {
-      const dateColIdx = av[0].indexOf(todayLabel)
+      const dateColIdx = findDateColIdx_(av[0], new Date())
       if (dateColIdx > -1) {
         av.slice(1).forEach(row => {
           const empName = String(row[1])
@@ -579,7 +593,7 @@ function markAttendance(body) {
   const headers = allVals[0]
 
   // Find date column
-  const dateColIdx = headers.indexOf(todayLabel)
+  const dateColIdx = findDateColIdx_(headers, new Date())
   if (dateColIdx === -1) return { success: false, message: 'Date column not found: ' + todayLabel }
 
   // Find employee row by name
@@ -645,7 +659,7 @@ function markAttendanceBulk(body) {
   const todayLabel = dateColLabel(new Date())
   const allVals = sh.getDataRange().getValues()
   const headers = allVals[0]
-  const dateColIdx = headers.indexOf(todayLabel)
+  const dateColIdx = findDateColIdx_(headers, new Date())
   if (dateColIdx === -1) return { success: false, message: 'Date column not found: ' + todayLabel }
 
   // Build a name -> row index map once
@@ -715,13 +729,12 @@ function getTodaySummary() {
   const productionTotal = employees.filter(e => e.Type === 'production').length
 
   const sh = getSS().getSheetByName(attTabName(ym.year, ym.month))
-  const todayLabel = dateColLabel(new Date())
   let officePresent = 0, productionPresent = 0
 
   if (sh) {
     const vals = sh.getDataRange().getValues()
     if (vals.length > 1) {
-      const dateColIdx = vals[0].indexOf(todayLabel)
+      const dateColIdx = findDateColIdx_(vals[0], new Date())
       if (dateColIdx > -1) {
         // Build employee type map
         const typeMap = {}
@@ -756,13 +769,12 @@ function getAbsenteesToday() {
   const employees = empVals.length > 1 ? rows2obj_(empVals) : []
 
   const sh = getSS().getSheetByName(attTabName(ym.year, ym.month))
-  const todayLabel = dateColLabel(new Date())
   const statusMap = {}
 
   if (sh) {
     const vals = sh.getDataRange().getValues()
     if (vals.length > 1) {
-      const dateColIdx = vals[0].indexOf(todayLabel)
+      const dateColIdx = findDateColIdx_(vals[0], new Date())
       if (dateColIdx > -1) {
         vals.slice(1).forEach(row => {
           const name = String(row[1]).toLowerCase().trim()
@@ -817,9 +829,8 @@ function getMonthlyAttendance(employeeId, year, month) {
     }
     for (let d = 1; d <= totalDays; d++) {
       const dateObj = new Date(year, month - 1, d)
-      const label = dateColLabel(dateObj)
       const ds = year + '-' + String(month).padStart(2, '0') + '-' + String(d).padStart(2, '0')
-      const colIdx = headers.indexOf(label)
+      const colIdx = findDateColIdx_(headers, dateObj)
       const status = empRow && colIdx > -1 ? String(empRow[colIdx] || '').toUpperCase() : null
       const normalized = status === 'P' ? 'present' : status === 'A' ? 'absent' :
         status === 'WO' ? 'weekoff' : status === 'WOP' ? 'wop' : status === 'NA' ? 'na' : null
@@ -858,9 +869,8 @@ function getAttendanceHistory(employeeId) {
     const totalDays = daysInMonth(y, m)
     for (let d = 1; d <= totalDays; d++) {
       const dateObj = new Date(y, m - 1, d)
-      const label = dateColLabel(dateObj)
       const ds = y + '-' + String(m).padStart(2, '0') + '-' + String(d).padStart(2, '0')
-      const colIdx = headers.indexOf(label)
+      const colIdx = findDateColIdx_(headers, dateObj)
       const s = empRow && colIdx > -1 ? String(empRow[colIdx] || '') : ''
       if (s) {
         const normalized = s === 'P' ? 'present' : s === 'A' ? 'absent' :
