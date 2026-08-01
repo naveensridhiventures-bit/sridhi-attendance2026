@@ -171,8 +171,14 @@ function ensureMonthlyTabs(year, month) {
   const ss = getSS()
 
   // Attendance tab — horizontal format
-  if (!ss.getSheetByName(attTabName(y, m))) {
+  const attSh = ss.getSheetByName(attTabName(y, m))
+  if (!attSh) {
     createAttendanceTab_(ss, y, m)
+  } else {
+    // Tab already exists (e.g. created early / manually / by a previous
+    // partial run) — make sure it still has every date column for the
+    // month. Safe & cheap to call every time; only appends what's missing.
+    ensureDateColumns_(attSh, y, m)
   }
 
   // Salary tab
@@ -227,6 +233,43 @@ function createAttendanceTab_(ss, year, month) {
   // Add existing employees as rows
   addEmployeeRowsToAttSheet_(sh, year, month)
   return sh
+}
+
+// Ensures an existing attendance tab has a column for every calendar day
+// of its month. Called on every request (cheap — only appends what's
+// missing) so the sheet self-heals even if it was created before the
+// month finished, created manually, or is missing today's column for any
+// other reason. This is what actually fixes "Date column not found".
+function ensureDateColumns_(sh, year, month) {
+  let lastCol = sh.getLastColumn()
+  let headers = lastCol > 0 ? sh.getRange(1, 1, 1, lastCol).getValues()[0] : []
+
+  // Blank/near-empty sheet (e.g. an empty tab was inserted manually) — seed it
+  if (headers.length < 2 || !headers[0]) {
+    sh.getRange(1, 1, 1, 2).setValues([['SNO', 'Employee Name']])
+    sh.getRange(1, 1, 1, 2).setBackground('#FFFF00').setFontWeight('bold').setHorizontalAlignment('center')
+    sh.setColumnWidth(1, 50)
+    sh.setColumnWidth(2, 160)
+    headers = ['SNO', 'Employee Name']
+    if (sh.getLastRow() < 2) addEmployeeRowsToAttSheet_(sh, year, month)
+  }
+
+  const totalDays = daysInMonth(year, month)
+  let col = headers.length
+  let added = 0
+  for (let d = 1; d <= totalDays; d++) {
+    const label = dateColLabel(new Date(year, month - 1, d))
+    if (headers.indexOf(label) === -1) {
+      col++
+      const rng = sh.getRange(1, col)
+      rng.setValue(label)
+      rng.setBackground('#FFFF00').setFontWeight('bold').setHorizontalAlignment('center')
+      sh.setColumnWidth(col, 70)
+      headers.push(label)
+      added++
+    }
+  }
+  if (added > 0) Logger.log('ensureDateColumns_: added ' + added + ' missing column(s) to ' + sh.getName())
 }
 
 function addEmployeeRowsToAttSheet_(sh, year, month) {
@@ -537,10 +580,16 @@ function markAttendance(body) {
 
   const todayLabel = dateColLabel(new Date())
   const allVals = sh.getDataRange().getValues()
-  const headers = allVals[0]
+  let headers = allVals[0]
 
-  // Find date column
-  const dateColIdx = headers.indexOf(todayLabel)
+  // Find date column — self-heal if it's missing (e.g. tab was created
+  // before this fix, or manually) instead of hard-failing
+  let dateColIdx = headers.indexOf(todayLabel)
+  if (dateColIdx === -1) {
+    ensureDateColumns_(sh, ym.year, ym.month)
+    headers = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0]
+    dateColIdx = headers.indexOf(todayLabel)
+  }
   if (dateColIdx === -1) return { success: false, message: 'Date column not found: ' + todayLabel }
 
   // Find employee row by name
@@ -605,8 +654,13 @@ function markAttendanceBulk(body) {
 
   const todayLabel = dateColLabel(new Date())
   const allVals = sh.getDataRange().getValues()
-  const headers = allVals[0]
-  const dateColIdx = headers.indexOf(todayLabel)
+  let headers = allVals[0]
+  let dateColIdx = headers.indexOf(todayLabel)
+  if (dateColIdx === -1) {
+    ensureDateColumns_(sh, ym.year, ym.month)
+    headers = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0]
+    dateColIdx = headers.indexOf(todayLabel)
+  }
   if (dateColIdx === -1) return { success: false, message: 'Date column not found: ' + todayLabel }
 
   // Build a name -> row index map once
@@ -1164,25 +1218,10 @@ function fixAttendanceSheetHeaders() {
     const shName = attTabName(y, m)
     let sh = ss.getSheetByName(shName)
     if (!sh) { sh = ss.insertSheet(shName); Logger.log('Created new sheet: ' + shName) }
-    const existing = sh.getDataRange().getValues()
-    const hasDateCols = existing.length > 0 && existing[0].length > 2
-    if (!hasDateCols) {
-      const totalDays = daysInMonth(y, m)
-      const headers = ['SNO', 'Employee Name']
-      for (let d = 1; d <= totalDays; d++) headers.push(dateColLabel(new Date(y, m - 1, d)))
-      sh.clearContents()
-      sh.appendRow(headers)
-      sh.setFrozenRows(1)
-      sh.setFrozenColumns(2)
-      sh.getRange(1, 1, 1, headers.length).setBackground('#FFFF00').setFontWeight('bold').setHorizontalAlignment('center')
-      sh.setColumnWidth(1, 50)
-      sh.setColumnWidth(2, 160)
-      for (let d = 3; d <= headers.length; d++) sh.setColumnWidth(d, 70)
-      addEmployeeRowsToAttSheet_(sh, y, m)
-      Logger.log('✅ Fixed ' + shName + ' — added ' + (headers.length - 2) + ' date columns')
-    } else {
-      Logger.log('✓ ' + shName + ' already has date columns: ' + existing[0][2])
-    }
+    // Checks every single day of the month (not just "are there >2 columns")
+    // and adds whichever ones are missing.
+    ensureDateColumns_(sh, y, m)
+    Logger.log('✓ Checked ' + shName)
   }
   SpreadsheetApp.flush()
   Logger.log('Done!')
