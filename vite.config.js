@@ -7,6 +7,7 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
+      injectRegister: false,
       includeAssets: ['favicon.ico', 'logo.png', 'icons/icon-192-v2.png', 'icons/icon-512-v2.png'],
       manifest: {
         name: 'Sridhi Ventures - Attendance',
