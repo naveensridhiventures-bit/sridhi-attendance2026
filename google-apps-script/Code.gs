@@ -134,19 +134,39 @@ function onEdit(e) {
     if (!e || !e.range) return // manual run from the editor, not a real edit — nothing to do
     const sheet = e.range.getSheet()
     const name = sheet.getName()
-    if (!name.endsWith(' Attendance')) return
+    if (e.range.getRow() === 1) return // ignore header-row edits everywhere
 
-    // Ignore edits to row 1 (headers) or column A (S.No) — only status
-    // cells and name edits should trigger a recalc.
-    if (e.range.getRow() === 1) return
+    if (name.endsWith(' Attendance')) {
+      const label = name.slice(0, -(' Attendance').length) // e.g. "July-2026"
+      const [monthName, yearStr] = label.split('-')
+      const month = FULL_MONTHS.indexOf(monthName) + 1
+      const year = parseInt(yearStr, 10)
+      if (!month || !year) return
+      syncSalarySheet_(year, month)
+      return
+    }
 
-    const label = name.slice(0, -(' Attendance').length) // e.g. "July-2026"
-    const [monthName, yearStr] = label.split('-')
-    const month = FULL_MONTHS.indexOf(monthName) + 1
-    const year = parseInt(yearStr, 10)
-    if (!month || !year) return
+    if (name.endsWith(' Salary')) {
+      // e.g. someone typed a new Advance amount directly into a Salary
+      // tab — recalculate that same month so Net Salary reflects it.
+      const label = name.slice(0, -(' Salary').length)
+      const [monthName, yearStr] = label.split('-')
+      const month = FULL_MONTHS.indexOf(monthName) + 1
+      const year = parseInt(yearStr, 10)
+      if (!month || !year) return
+      syncSalarySheet_(year, month)
+      return
+    }
 
-    syncSalarySheet_(year, month)
+    if (name === 'Employees') {
+      // Someone changed a monthly salary figure on the master Employees
+      // list. Refresh the CURRENT month's Salary tab so it picks up the
+      // new figure — past/closed months are left as historical record
+      // and don't get retroactively rewritten by a later salary change.
+      const ym = currentYM()
+      syncSalarySheet_(ym.year, ym.month)
+      return
+    }
   } catch (err) {
     // Never let a sync error break the person's manual edit
     console.error('onEdit sync failed: ' + err)
@@ -985,12 +1005,18 @@ function syncSalarySheet_(year, month) {
   // is what was making syncs slow enough to time out during bulk marking.
   const numRows = salVals.length - 1
   if (numRows > 0) {
+    const salaryCol = []
     const block = []
     const naBlock = []
     for (let i = 1; i < salVals.length; i++) {
       const name = normName_(salVals[i][1])
       const t = tally[name] || { P: 0, A: 0, WO: 0, WOP: 0, NA: 0 }
-      const monthly = parseFloat(salVals[i][2]) || 0
+      // Pull the current monthly salary from the Employees sheet if this
+      // person is still on the roster there — that's the source of truth.
+      // Only fall back to whatever's already in the Salary sheet if they
+      // were removed from Employees (keeps salary history intact for
+      // people no longer employed instead of zeroing them out).
+      const monthly = (name in empSalaryByName) ? empSalaryByName[name] : (parseFloat(salVals[i][2]) || 0)
       const advance = parseFloat(salVals[i][3]) || 0
       const perDay = workDays > 0 ? monthly / workDays : 0
       const paidDays = t.P + t.WOP
@@ -998,9 +1024,12 @@ function syncSalarySheet_(year, month) {
       const net = Math.max(gross - advance, 0)
       const warning = t.A > 3 ? 'EXCESS ABSENT' : 'OK'
 
+      salaryCol.push([monthly])
       block.push([workDays, t.P, t.A, t.WO, t.WOP, paidDays, perDay, gross, net, warning])
       naBlock.push([t.NA || 0])
     }
+    // Column 3 = Monthly Salary (kept in sync with the Employees sheet)
+    salSh.getRange(2, 3, numRows, 1).setValues(salaryCol)
     // Columns 5..14 = Total Days, P, A, WO, WOP, Paid Days, Per Day, Gross, Net, Warning
     salSh.getRange(2, 5, numRows, 10).setValues(block)
     // Column 15 = NA Count
