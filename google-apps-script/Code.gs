@@ -127,6 +127,29 @@ function monthTabLabel(year, month) {
 }
 
 // "01-Jun-26"
+// Google Sheets silently converts strings that look like dates (e.g.
+// "01-Aug-26") into real Date objects when written via script — same as
+// if you'd typed it into a cell. It still *displays* as "01-Aug-26", but
+// headers.indexOf("01-Aug-26") will never match a Date object, only an
+// actual string. This helper compares correctly either way.
+function dateHeaderMatches_(headerVal, dateObj) {
+  if (headerVal instanceof Date) {
+    return headerVal.getFullYear() === dateObj.getFullYear() &&
+      headerVal.getMonth() === dateObj.getMonth() &&
+      headerVal.getDate() === dateObj.getDate()
+  }
+  return String(headerVal).trim() === dateColLabel(dateObj)
+}
+
+// Finds the column index (0-based) of a given date in a header row,
+// regardless of whether the sheet stored it as text or as a real Date.
+function findDateColIndex_(headers, dateObj) {
+  for (let i = 0; i < headers.length; i++) {
+    if (dateHeaderMatches_(headers[i], dateObj)) return i
+  }
+  return -1
+}
+
 function dateColLabel(dateObj) {
   const d = String(dateObj.getDate()).padStart(2, '0')
   const m = SHORT_MONTHS[dateObj.getMonth()]
@@ -217,12 +240,17 @@ function createAttendanceTab_(ss, year, month) {
   for (let d = 1; d <= totalDays; d++) {
     headers.push(dateColLabel(new Date(year, month - 1, d)))
   }
-  sh.appendRow(headers)
+  const headerRange = sh.getRange(1, 1, 1, headers.length)
+  // Force plain-text format BEFORE writing values, otherwise Sheets
+  // silently reinterprets "01-Aug-26" as a real Date object — it still
+  // *displays* the same, but string comparisons against it will always
+  // fail, which is what caused "Date column not found".
+  headerRange.setNumberFormat('@')
+  headerRange.setValues([headers])
   sh.setFrozenRows(1)
   sh.setFrozenColumns(2)
 
   // Style header row
-  const headerRange = sh.getRange(1, 1, 1, headers.length)
   headerRange.setBackground('#FFFF00').setFontWeight('bold').setHorizontalAlignment('center')
 
   // Column widths
@@ -258,10 +286,15 @@ function ensureDateColumns_(sh, year, month) {
   let col = headers.length
   let added = 0
   for (let d = 1; d <= totalDays; d++) {
-    const label = dateColLabel(new Date(year, month - 1, d))
-    if (headers.indexOf(label) === -1) {
+    const dObj = new Date(year, month - 1, d)
+    const label = dateColLabel(dObj)
+    if (findDateColIndex_(headers, dObj) === -1) {
       col++
       const rng = sh.getRange(1, col)
+      // Force plain-text format BEFORE setting the value, otherwise Sheets
+      // silently reinterprets "01-Aug-26" as a real Date and this whole
+      // problem comes back on the next run.
+      rng.setNumberFormat('@')
       rng.setValue(label)
       rng.setBackground('#FFFF00').setFontWeight('bold').setHorizontalAlignment('center')
       sh.setColumnWidth(col, 70)
@@ -366,7 +399,7 @@ function getEmployees(type) {
   if (attSh) {
     const av = attSh.getDataRange().getValues()
     if (av.length > 1) {
-      const dateColIdx = av[0].indexOf(todayLabel)
+      const dateColIdx = findDateColIndex_(av[0], new Date())
       if (dateColIdx > -1) {
         av.slice(1).forEach(row => {
           const empName = String(row[1])
@@ -584,11 +617,11 @@ function markAttendance(body) {
 
   // Find date column — self-heal if it's missing (e.g. tab was created
   // before this fix, or manually) instead of hard-failing
-  let dateColIdx = headers.indexOf(todayLabel)
+  let dateColIdx = findDateColIndex_(headers, new Date())
   if (dateColIdx === -1) {
     ensureDateColumns_(sh, ym.year, ym.month)
     headers = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0]
-    dateColIdx = headers.indexOf(todayLabel)
+    dateColIdx = findDateColIndex_(headers, new Date())
   }
   if (dateColIdx === -1) return { success: false, message: 'Date column not found: ' + todayLabel }
 
@@ -655,11 +688,11 @@ function markAttendanceBulk(body) {
   const todayLabel = dateColLabel(new Date())
   const allVals = sh.getDataRange().getValues()
   let headers = allVals[0]
-  let dateColIdx = headers.indexOf(todayLabel)
+  let dateColIdx = findDateColIndex_(headers, new Date())
   if (dateColIdx === -1) {
     ensureDateColumns_(sh, ym.year, ym.month)
     headers = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0]
-    dateColIdx = headers.indexOf(todayLabel)
+    dateColIdx = findDateColIndex_(headers, new Date())
   }
   if (dateColIdx === -1) return { success: false, message: 'Date column not found: ' + todayLabel }
 
@@ -736,7 +769,7 @@ function getTodaySummary() {
   if (sh) {
     const vals = sh.getDataRange().getValues()
     if (vals.length > 1) {
-      const dateColIdx = vals[0].indexOf(todayLabel)
+      const dateColIdx = findDateColIndex_(vals[0], new Date())
       if (dateColIdx > -1) {
         // Build employee type map
         const typeMap = {}
@@ -777,7 +810,7 @@ function getAbsenteesToday() {
   if (sh) {
     const vals = sh.getDataRange().getValues()
     if (vals.length > 1) {
-      const dateColIdx = vals[0].indexOf(todayLabel)
+      const dateColIdx = findDateColIndex_(vals[0], new Date())
       if (dateColIdx > -1) {
         vals.slice(1).forEach(row => {
           const name = String(row[1]).toLowerCase().trim()
@@ -834,7 +867,7 @@ function getMonthlyAttendance(employeeId, year, month) {
       const dateObj = new Date(year, month - 1, d)
       const label = dateColLabel(dateObj)
       const ds = year + '-' + String(month).padStart(2, '0') + '-' + String(d).padStart(2, '0')
-      const colIdx = headers.indexOf(label)
+      const colIdx = findDateColIndex_(headers, dateObj)
       const status = empRow && colIdx > -1 ? String(empRow[colIdx] || '').toUpperCase() : null
       const normalized = status === 'P' ? 'present' : status === 'A' ? 'absent' :
         status === 'WO' ? 'weekoff' : status === 'WOP' ? 'wop' : status === 'NA' ? 'na' : null
@@ -875,7 +908,7 @@ function getAttendanceHistory(employeeId) {
       const dateObj = new Date(y, m - 1, d)
       const label = dateColLabel(dateObj)
       const ds = y + '-' + String(m).padStart(2, '0') + '-' + String(d).padStart(2, '0')
-      const colIdx = headers.indexOf(label)
+      const colIdx = findDateColIndex_(headers, dateObj)
       const s = empRow && colIdx > -1 ? String(empRow[colIdx] || '') : ''
       if (s) {
         const normalized = s === 'P' ? 'present' : s === 'A' ? 'absent' :
