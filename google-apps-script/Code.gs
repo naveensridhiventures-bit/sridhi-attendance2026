@@ -34,6 +34,17 @@ const COLORS = {
 
 // ─── JSONP-enabled routing ────────────────────────────────────────────────────
 
+// Actions that don't touch monthly Attendance/Salary/Permission tabs at
+// all — skipping ensureMonthlyTabs() for these cuts a real chunk of
+// latency off every quick call (announcements, logins, hero image, etc),
+// which was previously paying the same cost as attendance-heavy actions.
+const LIGHTWEIGHT_ACTIONS = new Set([
+  'getAnnouncement', 'setAnnouncement', 'clearAnnouncement',
+  'getHeroImage', 'setHeroImage',
+  'dashboardLogin', 'hrLogin',
+  'getHrWhatsappNumber', 'setHrWhatsappNumber'
+])
+
 function doGet(e) {
   const callback = e && e.parameter && e.parameter.callback
 
@@ -56,7 +67,7 @@ function doGet(e) {
   body.action = e.parameter.action
 
   try {
-    ensureMonthlyTabs()
+    if (!LIGHTWEIGHT_ACTIONS.has(body.action)) ensureMonthlyTabs()
     return respond(route_(body))
   } catch (err) {
     return respond({ success: false, message: err.message })
@@ -228,8 +239,6 @@ function ensureMonthlyTabs(year, month) {
 
   // Logs — permanent global tab, ensured up front
   getLogsSheet_()
-
-  SpreadsheetApp.flush()
 }
 
 function createAttendanceTab_(ss, year, month) {
@@ -576,7 +585,7 @@ function markAttendance(body) {
   // Find employee row by name
   let empRowIdx = -1
   for (let i = 1; i < allVals.length; i++) {
-    if (String(allVals[i][1]).toLowerCase().trim() === emp.name.toLowerCase().trim()) {
+    if (normName_(allVals[i][1]) === normName_(emp.name)) {
       empRowIdx = i
       break
     }
@@ -642,7 +651,7 @@ function markAttendanceBulk(body) {
   // Build a name -> row index map once
   const nameToRow = {}
   for (let i = 1; i < allVals.length; i++) {
-    nameToRow[String(allVals[i][1]).toLowerCase().trim()] = i
+    nameToRow[normName_(allVals[i][1])] = i
   }
 
   const nowTime = timeStr()
@@ -655,11 +664,11 @@ function markAttendanceBulk(body) {
     if (!empRes.success) { failed.push({ employeeId: entry.employeeId, message: 'Employee not found' }); return }
     const emp = empRes.employee
 
-    let rowIdx = nameToRow[emp.name.toLowerCase().trim()]
+    let rowIdx = nameToRow[normName_(emp.name)]
     if (rowIdx === undefined) {
       sh.appendRow([allVals.length, emp.name])
       rowIdx = sh.getLastRow() - 1
-      nameToRow[emp.name.toLowerCase().trim()] = rowIdx
+      nameToRow[normName_(emp.name)] = rowIdx
     }
 
     const finalStatus = (entry.status || 'present').toUpperCase()
@@ -866,6 +875,10 @@ function getAttendanceHistory(employeeId) {
 
 // ─── Salary Calculation ───────────────────────────────────────────────────────
 
+function normName_(name) {
+  return String(name || '').toLowerCase().trim().replace(/\s+/g, ' ')
+}
+
 function syncSalarySheet_(year, month) {
   const salSh = getSS().getSheetByName(salTabName(year, month))
   const attSh = getSS().getSheetByName(attTabName(year, month))
@@ -887,27 +900,27 @@ function syncSalarySheet_(year, month) {
   // sheet (or already has an Attendance row) but is missing from the Salary
   // sheet — otherwise sync has nowhere to write their numbers and they stay
   // blank forever, no matter how many times attendance gets marked.
-  const existingNames = new Set(salVals.slice(1).map(r => String(r[1]).toLowerCase().trim()).filter(Boolean))
+  const existingNames = new Set(salVals.slice(1).map(r => normName_(r[1])).filter(Boolean))
   const empSh = getEmpSheet()
   const empRoster = empSh ? rows2obj_(empSh.getDataRange().getValues()) : []
   const empSalaryByName = {}
-  empRoster.forEach(e => { empSalaryByName[String(e.Name || '').toLowerCase().trim()] = parseFloat(e.Salary) || 0 })
+  empRoster.forEach(e => { empSalaryByName[normName_(e.Name)] = parseFloat(e.Salary) || 0 })
 
   // Anyone in Attendance (or Employees) not yet in Salary
   const namesNeeded = []
   attVals.slice(1).forEach(row => {
     const name = String(row[1]).trim()
-    if (name && !existingNames.has(name.toLowerCase())) { namesNeeded.push(name); existingNames.add(name.toLowerCase()) }
+    if (name && !existingNames.has(normName_(name))) { namesNeeded.push(name); existingNames.add(normName_(name)) }
   })
   empRoster.forEach(e => {
     const name = String(e.Name || '').trim()
-    if (name && !existingNames.has(name.toLowerCase())) { namesNeeded.push(name); existingNames.add(name.toLowerCase()) }
+    if (name && !existingNames.has(normName_(name))) { namesNeeded.push(name); existingNames.add(normName_(name)) }
   })
 
   if (namesNeeded.length) {
     const startSNo = salVals.length // header counts as row 1, so this is next S.No
     const newRows = namesNeeded.map((name, idx) => {
-      const monthly = empSalaryByName[name.toLowerCase().trim()] || 0
+      const monthly = empSalaryByName[normName_(name)] || 0
       const perDay = workDays > 0 ? monthly / workDays : 0
       return [startSNo + idx, name, monthly, 0, workDays, 0, 0, 0, 0, 0, perDay, 0, 0, 'OK', 0]
     })
@@ -915,17 +928,21 @@ function syncSalarySheet_(year, month) {
     salVals = salSh.getDataRange().getValues() // re-read so the rest of the sync sees the new rows
   }
 
-  // Build tally from attendance sheet
+  // Build tally from attendance sheet. Uses += rather than a flat
+  // assignment so that if the same person accidentally has more than one
+  // row in the Attendance sheet (a stray duplicate), their counts get
+  // ADDED together instead of the later row silently wiping out the
+  // earlier one's numbers.
   const tally = {}
   attVals.slice(1).forEach(row => {
-    const name = String(row[1]).toLowerCase().trim()
+    const name = normName_(row[1])
     if (!name) return
-    const t = { P: 0, A: 0, WO: 0, WOP: 0, NA: 0 }
+    if (!tally[name]) tally[name] = { P: 0, A: 0, WO: 0, WOP: 0, NA: 0 }
+    const t = tally[name]
     attHeaders.slice(2).forEach((h, i) => {
       const s = String(row[i + 2] || '').toUpperCase().trim()
       if (t[s] !== undefined) t[s]++
     })
-    tally[name] = t
   })
 
   // Update each employee row in salary sheet — build the whole block in memory
@@ -937,7 +954,7 @@ function syncSalarySheet_(year, month) {
     const block = []
     const naBlock = []
     for (let i = 1; i < salVals.length; i++) {
-      const name = String(salVals[i][1]).toLowerCase().trim()
+      const name = normName_(salVals[i][1])
       const t = tally[name] || { P: 0, A: 0, WO: 0, WOP: 0, NA: 0 }
       const monthly = parseFloat(salVals[i][2]) || 0
       const advance = parseFloat(salVals[i][3]) || 0

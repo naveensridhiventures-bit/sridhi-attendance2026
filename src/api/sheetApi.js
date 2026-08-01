@@ -4,7 +4,7 @@
 
 const WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbya8BFv-oil5JBTKNqYELN4graDsA86LvqCwKcQqDk0iW09UqXXQJIPL8IOfVKUA4Cy/exec'
 
-function callApi(action, payload = {}, timeoutMs = 15000) {
+function callApi(action, payload = {}, timeoutMs = 20000) {
   return new Promise((resolve, reject) => {
     const cbName = '__gs_cb_' + Date.now() + '_' + Math.floor(Math.random() * 99999)
 
@@ -15,7 +15,14 @@ function callApi(action, payload = {}, timeoutMs = 15000) {
 
     function cleanup() {
       clearTimeout(timeout)
-      delete window[cbName]
+      // Leave a harmless no-op behind instead of deleting the callback
+      // outright — if the Apps Script response arrives after we've
+      // already given up waiting on it, it still tries to call this
+      // function by name. Deleting it entirely turns that into a visible
+      // "ReferenceError: ... is not defined" in the console even though
+      // nothing is actually broken; a no-op just quietly absorbs it.
+      window[cbName] = () => {}
+      setTimeout(() => { delete window[cbName] }, 120000)
       const el = document.getElementById(cbName)
       if (el) el.remove()
     }
