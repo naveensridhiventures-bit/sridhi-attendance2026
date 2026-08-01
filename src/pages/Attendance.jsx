@@ -371,19 +371,47 @@ export default function Attendance() {
           </div>
         )}
 
-        {/* Not yet marked */}
+        {/* Today's status breakdown */}
         {mode === 'mark' && !loading && (
-          <div className="mt-5">
-            <p className="text-xs font-semibold text-slate-500 mb-2 uppercase tracking-wide">
-              ⚠ Not yet marked ({unmarked.length})
-            </p>
-            <div className="flex flex-wrap gap-1.5">
-              {unmarked.slice(0, 30).map((e) => (
-                <span key={e.employeeId} className="text-[11px] bg-white border border-brand-100 text-slate-500 rounded-full px-3 py-1">
-                  {e.name}
-                </span>
-              ))}
-              {unmarked.length === 0 && <span className="text-xs text-brand-600">Everyone is marked for today 🎉</span>}
+          <div className="mt-5 space-y-4">
+            {STATUS_OPTIONS.map((opt) => {
+              const list = employees.filter((e) => marked[e.employeeId] && getStatusMeta(marked[e.employeeId]).key === opt.key)
+              if (!list.length) return null
+              return (
+                <div key={opt.key}>
+                  <p className="text-xs font-semibold text-slate-500 mb-2 uppercase tracking-wide flex items-center gap-1.5">
+                    <span className={`w-2 h-2 rounded-full ${opt.dot}`} />
+                    {opt.full} ({list.length})
+                  </p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {list.slice(0, 40).map((e) => (
+                      <span key={e.employeeId} className={`text-[11px] rounded-full px-3 py-1 border ${opt.soft}`}>
+                        {e.name}
+                      </span>
+                    ))}
+                    {list.length > 40 && (
+                      <span className="text-[11px] text-slate-400 px-1 py-1">+{list.length - 40} more</span>
+                    )}
+                  </div>
+                </div>
+              )
+            })}
+
+            <div>
+              <p className="text-xs font-semibold text-slate-500 mb-2 uppercase tracking-wide">
+                ⚠ Not yet marked ({unmarked.length})
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {unmarked.slice(0, 40).map((e) => (
+                  <span key={e.employeeId} className="text-[11px] bg-white border border-brand-100 text-slate-500 rounded-full px-3 py-1">
+                    {e.name}
+                  </span>
+                ))}
+                {unmarked.length > 40 && (
+                  <span className="text-[11px] text-slate-400 px-1 py-1">+{unmarked.length - 40} more</span>
+                )}
+                {unmarked.length === 0 && <span className="text-xs text-brand-600">Everyone is marked for today 🎉</span>}
+              </div>
             </div>
           </div>
         )}
