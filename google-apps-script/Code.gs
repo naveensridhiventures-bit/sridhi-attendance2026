@@ -120,6 +120,7 @@ function jsonOut(obj) {
 // the UI, which previously had no effect on the Salary tab at all.
 function onEdit(e) {
   try {
+    if (!e || !e.range) return // manual run from the editor, not a real edit — nothing to do
     const sheet = e.range.getSheet()
     const name = sheet.getName()
     if (!name.endsWith(' Attendance')) return
