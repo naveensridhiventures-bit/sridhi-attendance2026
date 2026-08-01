@@ -182,12 +182,36 @@ function dateColLabel(dateObj) {
 // would fail for that column. This checks both possible forms so it finds
 // the column either way.
 function findDateColIdx_(headerRow, dateObj) {
+  const label = dateColLabel(dateObj)
   for (let i = 2; i < headerRow.length; i++) {
     const cell = headerRow[i]
     const cellLabel = (cell instanceof Date) ? dateColLabel(cell) : String(cell || '').trim()
     if (cellLabel === label) return i
   }
   return -1
+}
+
+// Diagnostic helper — run this once from the editor (select it in the
+// function dropdown, click Run, then View > Logs) if "Date column not
+// found" ever comes back. Shows exactly what's stored in the header row.
+function debugDateColumn() {
+  const ym = currentYM()
+  const sh = getSS().getSheetByName(attTabName(ym.year, ym.month))
+  if (!sh) { Logger.log('No Attendance sheet found for ' + attTabName(ym.year, ym.month)); return }
+
+  const now = new Date()
+  Logger.log('Server "now": ' + now)
+  Logger.log('Server today label (dateColLabel): ' + dateColLabel(now))
+  Logger.log('Sheet timezone: ' + getSS().getSpreadsheetTimeZone())
+  Logger.log('Script TZ constant: ' + TZ)
+
+  const headers = sh.getRange(1, 1, 1, 8).getValues()[0]
+  headers.forEach((h, i) => {
+    Logger.log('Header[' + i + '] = ' + JSON.stringify(h) + '  |  typeof=' + typeof h + '  |  isDate=' + (h instanceof Date))
+  })
+
+  const idx = findDateColIdx_(sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0], now)
+  Logger.log('findDateColIdx_ result: ' + idx)
 }
 
 function todayStr() {
