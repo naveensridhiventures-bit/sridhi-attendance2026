@@ -1,5 +1,5 @@
-import React, { useMemo, useState } from 'react'
-import { markAttendanceForDate } from '../api/sheetApi.js'
+import React, { useEffect, useMemo, useState } from 'react'
+import { markAttendanceForDate, getAttendanceForDate } from '../api/sheetApi.js'
 import { useToast } from './Toast.jsx'
 import { STATUS_OPTIONS, getStatusMeta } from '../utils/attendanceStatus.js'
 import { haptics } from '../utils/haptics.js'
@@ -24,13 +24,31 @@ export default function EditAttendanceByDate({ employees }) {
   const [status, setStatus] = useState('present')
   const [submitting, setSubmitting] = useState(false)
   const [results, setResults] = useState(null)
+  const [existing, setExisting] = useState({}) // { employeeId: 'P' | 'A' | ... }
+  const [loadingExisting, setLoadingExisting] = useState(false)
+  const [hideMarked, setHideMarked] = useState(false)
+
+  // Whenever the date changes, load what's already marked for that day —
+  // same idea as the "already marked" dots on the regular Attendance page,
+  // just for whichever date HR picks instead of only today.
+  useEffect(() => {
+    if (!date) { setExisting({}); return }
+    let cancelled = false
+    setLoadingExisting(true)
+    getAttendanceForDate({ date })
+      .then((res) => { if (!cancelled) setExisting(res.statusByEmployeeId || {}) })
+      .catch(() => { if (!cancelled) setExisting({}) })
+      .finally(() => { if (!cancelled) setLoadingExisting(false) })
+    return () => { cancelled = true }
+  }, [date])
 
   const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase()
     let list = employees
+    if (hideMarked) list = list.filter((e) => !existing[e.employeeId])
+    const q = query.trim().toLowerCase()
     if (q) list = list.filter((e) => e.name.toLowerCase().includes(q))
     return [...list].sort((a, b) => a.name.localeCompare(b.name))
-  }, [employees, query])
+  }, [employees, query, hideMarked, existing])
 
   function toggle(id) {
     setSelected((s) => {
@@ -83,6 +101,18 @@ export default function EditAttendanceByDate({ employees }) {
 
     setSubmitting(false)
     setResults({ okNames, failed })
+    setExisting((prev) => {
+      const next = { ...prev }
+      ids.forEach((id) => {
+        const name = employees.find((e) => e.employeeId === id)?.name
+        if (okNames.includes(name)) {
+          const s = getStatusMeta(status)
+          next[id] = s.key === 'present' ? 'P' : s.key === 'absent' ? 'A' :
+            s.key === 'weekoff' ? 'WO' : s.key === 'wop' ? 'WOP' : s.key === 'na' ? 'NA' : status
+        }
+      })
+      return next
+    })
     setSelected(new Set())
 
     if (okNames.length) {
@@ -145,7 +175,11 @@ export default function EditAttendanceByDate({ employees }) {
           <label className="block text-xs text-slate-500 font-semibold uppercase tracking-wide">
             Select Workers {selected.size > 0 && <span className="text-brand-600">({selected.size} selected)</span>}
           </label>
+          <button onClick={() => setHideMarked((v) => !v)} className="text-[10px] font-semibold text-brand-600">
+            {hideMarked ? 'Show all' : 'Hide already marked'}
+          </button>
         </div>
+        {loadingExisting && <p className="text-[10px] text-slate-400 mb-1.5">Loading what's already marked for {date}…</p>}
 
         <input
           value={query}
@@ -164,9 +198,14 @@ export default function EditAttendanceByDate({ employees }) {
         </div>
 
         <div className="max-h-72 overflow-y-auto rounded-2xl border border-brand-50 divide-y divide-brand-50">
-          {filtered.length === 0 && <p className="text-center text-xs text-slate-400 py-6">No matching worker</p>}
+          {filtered.length === 0 && (
+            <p className="text-center text-xs text-slate-400 py-6">
+              {hideMarked ? 'Everyone is already marked for this date 🎉' : 'No matching worker'}
+            </p>
+          )}
           {filtered.map((e) => {
             const isSel = selected.has(e.employeeId)
+            const existingMeta = getStatusMeta(existing[e.employeeId])
             return (
               <label
                 key={e.employeeId}
@@ -178,8 +217,11 @@ export default function EditAttendanceByDate({ employees }) {
                   onChange={() => toggle(e.employeeId)}
                   className="w-4 h-4 accent-brand-500 shrink-0"
                 />
+                <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${existingMeta.dot}`} />
                 <span className="text-sm font-medium text-ink truncate flex-1">{e.name}</span>
-                <span className="shrink-0 text-[10px] text-slate-400">{e.employeeId}</span>
+                {existing[e.employeeId] && (
+                  <span className={`shrink-0 text-[10px] font-semibold rounded-full px-2 py-0.5 border ${existingMeta.soft}`}>{existingMeta.full}</span>
+                )}
               </label>
             )
           })}

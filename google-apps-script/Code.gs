@@ -97,6 +97,7 @@ function route_(body) {
   if (a === 'markAttendance')        return markAttendance(body)
   if (a === 'markAttendanceBulk')    return markAttendanceBulk(body)
   if (a === 'markAttendanceForDate') return markAttendanceForDate(body)
+  if (a === 'getAttendanceForDate')  return getAttendanceForDate(body)
   if (a === 'getTodaySummary')       return getTodaySummary()
   if (a === 'getMonthlyAttendance')  return getMonthlyAttendance(body.employeeId, body.year, body.month)
   if (a === 'getAttendanceHistory')  return getAttendanceHistory(body.employeeId)
@@ -843,6 +844,44 @@ function markAttendanceForDate(body) {
   syncSalarySheet_(year, month)
 
   return { success: true, marked: okNames, failed: failed, date: date }
+}
+
+// Returns { employeeId: status } for every employee on a given date, so
+// the HR "Edit Attendance for a Date" tool can show what's already marked
+// before someone changes it — same idea as todayStatus on getEmployees(),
+// but for any date instead of only today.
+function getAttendanceForDate(body) {
+  const { date } = body
+  if (!date) return { success: false, message: 'No date provided' }
+
+  const d = new Date(date + 'T00:00:00')
+  if (isNaN(d.getTime())) return { success: false, message: 'Invalid date' }
+  const year = d.getFullYear()
+  const month = d.getMonth() + 1
+
+  const empSh = getEmpSheet()
+  const empVals = empSh ? empSh.getDataRange().getValues() : [[]]
+  const emps = empVals.length > 1 ? rows2obj_(empVals) : []
+  const idByName = {}
+  emps.forEach(e => { idByName[normName_(e.Name)] = String(e.EmployeeID) })
+
+  const sh = getSS().getSheetByName(attTabName(year, month))
+  const statusByEmployeeId = {}
+  if (sh) {
+    const vals = sh.getDataRange().getValues()
+    if (vals.length > 1) {
+      const dateColIdx = findDateColIdx_(vals[0], d)
+      if (dateColIdx > -1) {
+        vals.slice(1).forEach(row => {
+          const empId = idByName[normName_(row[1])]
+          const status = row[dateColIdx]
+          if (empId && status) statusByEmployeeId[empId] = String(status)
+        })
+      }
+    }
+  }
+
+  return { success: true, date: date, statusByEmployeeId: statusByEmployeeId }
 }
 
 function getTodaySummary() {
