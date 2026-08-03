@@ -7,6 +7,7 @@ import MessageComposer from '../components/MessageComposer.jsx'
 import MonthlySalaryView from '../components/MonthlySalaryView.jsx'
 import LogsView from '../components/LogsView.jsx'
 import AbsenteeWhatsApp from '../components/AbsenteeWhatsApp.jsx'
+import EditAttendanceByDate from '../components/EditAttendanceByDate.jsx'
 
 export default function HRDashboard() {
   const showToast = useToast()
@@ -104,6 +105,7 @@ export default function HRDashboard() {
       <div className="grid grid-cols-3 gap-1.5 mb-5 bg-white p-1.5 rounded-2xl border border-brand-100 shadow-card">
         {[
           { key: 'salary',   label: 'Salary',   icon: '₹' },
+          { key: 'editatt',  label: 'Edit Att.', icon: '🗓️' },
           { key: 'leave',    label: 'Leave',    icon: '📋' },
           { key: 'logs',     label: 'Logs',     icon: '🕒' },
           { key: 'hero',     label: 'Hero',     icon: '🖼' },
@@ -169,6 +171,12 @@ export default function HRDashboard() {
           {/* Monthly salary summary view */}
           <p className="font-display font-semibold text-ink text-sm">Monthly Salary Sheet</p>
           <MonthlySalaryView />
+        </div>
+      )}
+
+      {tab === 'editatt' && (
+        <div className="animate-popIn">
+          <EditAttendanceByDate employees={employees} />
         </div>
       )}
 

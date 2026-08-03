@@ -96,6 +96,7 @@ function route_(body) {
   if (a === 'getEmployeeById')       return getEmployeeById(body.employeeId)
   if (a === 'markAttendance')        return markAttendance(body)
   if (a === 'markAttendanceBulk')    return markAttendanceBulk(body)
+  if (a === 'markAttendanceForDate') return markAttendanceForDate(body)
   if (a === 'getTodaySummary')       return getTodaySummary()
   if (a === 'getMonthlyAttendance')  return getMonthlyAttendance(body.employeeId, body.year, body.month)
   if (a === 'getAttendanceHistory')  return getAttendanceHistory(body.employeeId)
@@ -762,6 +763,86 @@ function markAttendanceBulk(body) {
   syncSalarySheet_(ym.year, ym.month)
 
   return { success: true, marked: okNames, failed: failed, time: nowTime }
+}
+
+// Lets HR correct or backfill attendance for ANY date — past or future —
+// not just today. Used by the "Edit Attendance" tool in HR Admin where
+// they pick a date and one or more workers.
+function markAttendanceForDate(body) {
+  const { date, entries, markedBy } = body
+  if (!date) return { success: false, message: 'No date provided' }
+  if (!entries || !entries.length) return { success: false, message: 'No entries provided' }
+
+  const d = new Date(date + 'T00:00:00')
+  if (isNaN(d.getTime())) return { success: false, message: 'Invalid date' }
+  const year = d.getFullYear()
+  const month = d.getMonth() + 1
+
+  const ss = getSS()
+  ensureMonthlyTabs(year, month) // make sure that month's tabs exist even if it's not the current month
+  const sh = ss.getSheetByName(attTabName(year, month))
+  if (!sh) return { success: false, message: 'Could not prepare Attendance sheet for ' + attTabName(year, month) }
+
+  const allVals = sh.getDataRange().getValues()
+  const headers = allVals[0]
+  const dateColIdx = findDateColIdx_(headers, d)
+  if (dateColIdx === -1) return { success: false, message: 'Date column not found: ' + dateColLabel(d) }
+
+  const nameToRow = {}
+  for (let i = 1; i < allVals.length; i++) {
+    nameToRow[normName_(allVals[i][1])] = i
+  }
+
+  const nowTime = timeStr()
+  const okNames = []
+  const failed = []
+  const logEntries = []
+
+  entries.forEach(entry => {
+    const empRes = getEmployeeById(entry.employeeId)
+    if (!empRes.success) { failed.push({ employeeId: entry.employeeId, message: 'Employee not found' }); return }
+    const emp = empRes.employee
+
+    let rowIdx = nameToRow[normName_(emp.name)]
+    if (rowIdx === undefined) {
+      sh.appendRow([allVals.length, emp.name])
+      rowIdx = sh.getLastRow() - 1
+      nameToRow[normName_(emp.name)] = rowIdx
+    }
+
+    const finalStatus = (entry.status || 'present').toUpperCase()
+    const displayStatus = finalStatus === 'PRESENT' ? 'P' : finalStatus === 'ABSENT' ? 'A' :
+      finalStatus === 'WEEKOFF' ? 'WO' : finalStatus === 'WOP' ? 'WOP' : finalStatus === 'NA' ? 'NA' : finalStatus
+
+    const cell = sh.getRange(rowIdx + 1, dateColIdx + 1)
+    cell.setValue(displayStatus)
+    cell.setBackground(COLORS[displayStatus] || '#FFFFFF')
+    cell.setHorizontalAlignment('center')
+    cell.setFontWeight('bold')
+
+    logEntries.push({
+      date: date,
+      time: nowTime,
+      employeeId: entry.employeeId,
+      name: emp.name,
+      role: emp.role || '',
+      type: emp.type || '',
+      status: displayStatus,
+      markedBy: 'HR: ' + (markedBy || 'Admin') + ' (edited for ' + date + ')',
+      latitude: '',
+      longitude: '',
+      timestamp: new Date()
+    })
+
+    okNames.push(emp.name)
+  })
+
+  logEntries.forEach(appendAttendanceLog_)
+
+  // Recalculate salary for whichever month that date falls in
+  syncSalarySheet_(year, month)
+
+  return { success: true, marked: okNames, failed: failed, date: date }
 }
 
 function getTodaySummary() {

@@ -64,6 +64,8 @@ export const markAttendance       = ({ employeeId, status, mode, supervisorName,
   callApi('markAttendance', { employeeId, status, mode, supervisorName, location })
 export const markAttendanceBulk   = ({ entries, mode, supervisorName, location }) =>
   callApi('markAttendanceBulk', { entries, mode, supervisorName, location }, 45000)
+export const markAttendanceForDate = ({ date, entries, markedBy }) =>
+  callApi('markAttendanceForDate', { date, entries, markedBy }, 45000)
 export const getTodaySummary      = ()                           => callApi('getTodaySummary')
 export const getAttendanceHistory = (employeeId)                 => callApi('getAttendanceHistory', { employeeId })
 export const getMonthlyAttendance = (employeeId, year, month)    => callApi('getMonthlyAttendance', { employeeId, year, month })
