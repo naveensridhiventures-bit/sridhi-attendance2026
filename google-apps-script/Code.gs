@@ -1143,7 +1143,11 @@ function syncSalarySheet_(year, month) {
       // counts toward Paid Days alongside P (Present) and WOP (Worked on
       // what would've been a week off). Only A (Absent) and NA are unpaid.
       const paidDays = t.P + t.WO + t.WOP
-      const gross = Math.round(paidDays * perDay)
+      // WOP means someone came in on their day off, so it's paid DOUBLE —
+      // "Paid Days" above still shows the plain day count for tracking,
+      // but the actual salary math counts each WOP day twice.
+      const payableUnits = t.P + t.WO + (t.WOP * 2)
+      const gross = Math.round(payableUnits * perDay)
       const net = Math.max(gross - advance, 0)
       const warning = t.A > 3 ? 'EXCESS ABSENT' : 'OK'
 
