@@ -1139,7 +1139,10 @@ function syncSalarySheet_(year, month) {
       const monthly = (name in empSalaryByName) ? empSalaryByName[name] : (parseFloat(salVals[i][2]) || 0)
       const advance = parseFloat(salVals[i][3]) || 0
       const perDay = workDays > 0 ? monthly / workDays : 0
-      const paidDays = t.P + t.WOP
+      // WO (Week Off) is paid leave, same as a normal working day — it
+      // counts toward Paid Days alongside P (Present) and WOP (Worked on
+      // what would've been a week off). Only A (Absent) and NA are unpaid.
+      const paidDays = t.P + t.WO + t.WOP
       const gross = Math.round(paidDays * perDay)
       const net = Math.max(gross - advance, 0)
       const warning = t.A > 3 ? 'EXCESS ABSENT' : 'OK'
