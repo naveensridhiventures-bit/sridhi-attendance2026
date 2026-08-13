@@ -42,7 +42,9 @@ const LIGHTWEIGHT_ACTIONS = new Set([
   'getAnnouncement', 'setAnnouncement', 'clearAnnouncement',
   'getHeroImage', 'setHeroImage',
   'dashboardLogin', 'hrLogin',
-  'getHrWhatsappNumber', 'setHrWhatsappNumber'
+  'getHrWhatsappNumber', 'setHrWhatsappNumber',
+  'addDeduction', 'getDeductionsForEmployee', 'getAllDeductionsForMonth', 'deleteDeduction',
+  'addDriverKm', 'getDriverKmLogs', 'getDriverKmSummary', 'deleteDriverKmEntry'
 ])
 
 function doGet(e) {
@@ -118,6 +120,14 @@ function route_(body) {
   if (a === 'getAbsenteesToday')     return getAbsenteesToday()
   if (a === 'getHrWhatsappNumber')   return getHrWhatsappNumber()
   if (a === 'setHrWhatsappNumber')   return setHrWhatsappNumber(body.number)
+  if (a === 'addDeduction')          return addDeduction(body.entry)
+  if (a === 'getDeductionsForEmployee') return getDeductionsForEmployee(body.employeeId, body.year, body.month)
+  if (a === 'getAllDeductionsForMonth') return getAllDeductionsForMonth(body.year, body.month)
+  if (a === 'deleteDeduction')       return deleteDeduction(body.entryId)
+  if (a === 'addDriverKm')           return addDriverKm(body.entry)
+  if (a === 'getDriverKmLogs')       return getDriverKmLogs(body.employeeId, body.fromDate, body.toDate)
+  if (a === 'getDriverKmSummary')    return getDriverKmSummary()
+  if (a === 'deleteDriverKmEntry')   return deleteDriverKmEntry(body.entryId)
   return { success: false, message: 'Unknown action: ' + a }
 }
 
@@ -387,6 +397,193 @@ function getMonthlyTabsList() {
     if (m) months.push(m[1])
   })
   return { success: true, months: months.sort().reverse() }
+}
+
+// ─── Deductions Ledger (Advance / Penalty / Gas / Food / Rice / Custom) ────────
+// One permanent sheet holding every deduction entry ever made, across all
+// months. This is the single source of truth for the "Advance" figure in
+// the Salary sheet — syncSalarySheet_() sums this ledger per employee per
+// month and writes the total into the Salary tab's Advance column, so Net
+// Salary always reflects it automatically without any separate step.
+
+function ensureDeductionsSheet_() {
+  const ss = getSS()
+  let sh = ss.getSheetByName('Deductions')
+  if (!sh) {
+    sh = ss.insertSheet('Deductions')
+    sh.appendRow(['EntryID', 'EmployeeID', 'Employee Name', 'Date', 'Category', 'Note', 'Amount', 'Added By', 'CreatedAt'])
+    sh.setFrozenRows(1)
+    formatHeader_(sh, 9)
+  }
+  return sh
+}
+
+function addDeduction(entry) {
+  if (!entry || !entry.employeeId || !entry.date || !entry.category || !(parseFloat(entry.amount) > 0)) {
+    return { success: false, message: 'Employee, date, category and a positive amount are required' }
+  }
+  const sh = ensureDeductionsSheet_()
+  const id = 'DED-' + Date.now()
+  sh.appendRow([
+    id, entry.employeeId, entry.name || '', entry.date, entry.category,
+    entry.note || '', parseFloat(entry.amount) || 0, entry.addedBy || '', new Date()
+  ])
+  return { success: true, entryId: id }
+}
+
+function deleteDeduction(entryId) {
+  const sh = getSS().getSheetByName('Deductions')
+  if (!sh) return { success: false, message: 'No deductions recorded yet' }
+  const vals = sh.getDataRange().getValues()
+  for (let i = 1; i < vals.length; i++) {
+    if (String(vals[i][0]) === String(entryId)) {
+      sh.deleteRow(i + 1)
+      return { success: true }
+    }
+  }
+  return { success: false, message: 'Entry not found' }
+}
+
+function _deductionRows() {
+  const sh = getSS().getSheetByName('Deductions')
+  if (!sh) return []
+  const vals = sh.getDataRange().getValues()
+  if (vals.length < 2) return []
+  return rows2obj_(vals).map(r => ({
+    entryId: r.EntryID, employeeId: String(r.EmployeeID), name: r['Employee Name'],
+    date: fmtDate(r.Date), category: r.Category, note: r.Note,
+    amount: parseFloat(r.Amount) || 0, addedBy: r['Added By']
+  }))
+}
+
+function getDeductionsForEmployee(employeeId, year, month) {
+  const ym = (year && month) ? { year, month } : currentYM()
+  const rows = _deductionRows().filter(r => {
+    if (String(r.employeeId) !== String(employeeId)) return false
+    const d = new Date(r.date)
+    return d.getFullYear() === ym.year && (d.getMonth() + 1) === ym.month
+  }).sort((a, b) => a.date < b.date ? 1 : -1)
+  const total = rows.reduce((s, r) => s + r.amount, 0)
+  return { success: true, entries: rows, total }
+}
+
+function getAllDeductionsForMonth(year, month) {
+  const ym = (year && month) ? { year, month } : currentYM()
+  const rows = _deductionRows().filter(r => {
+    const d = new Date(r.date)
+    return d.getFullYear() === ym.year && (d.getMonth() + 1) === ym.month
+  }).sort((a, b) => a.date < b.date ? 1 : -1)
+  return { success: true, entries: rows }
+}
+
+// Sums this ledger per normalized employee name for a given month —
+// called from syncSalarySheet_() so Net Salary always reflects every
+// Advance/Penalty/Gas/Food/Rice/Custom entry on file.
+function deductionTotalsByName_(year, month) {
+  const totals = {}
+  _deductionRows().forEach(r => {
+    const d = new Date(r.date)
+    if (d.getFullYear() !== year || (d.getMonth() + 1) !== month) return
+    const key = normName_(r.name)
+    if (!key) return
+    totals[key] = (totals[key] || 0) + r.amount
+  })
+  return totals
+}
+
+// ─── Driver KM Ledger ───────────────────────────────────────────────────────────
+// One permanent sheet — every trip, any driver, any lease vehicle, ever
+// logged. Trip KM is computed server-side (End − Start) so it can never
+// drift from what's actually stored.
+
+function ensureDriverKmSheet_() {
+  const ss = getSS()
+  let sh = ss.getSheetByName('DriverKM')
+  if (!sh) {
+    sh = ss.insertSheet('DriverKM')
+    sh.appendRow(['EntryID', 'Date', 'EmployeeID', 'Driver Name', 'Vehicle', 'Start KM', 'End KM', 'Trip KM', 'Notes', 'Added By', 'CreatedAt'])
+    sh.setFrozenRows(1)
+    formatHeader_(sh, 11)
+  }
+  return sh
+}
+
+function addDriverKm(entry) {
+  if (!entry || !entry.employeeId || !entry.date) {
+    return { success: false, message: 'Driver and date are required' }
+  }
+  const startKm = parseFloat(entry.startKm)
+  const endKm = parseFloat(entry.endKm)
+  if (isNaN(startKm) || isNaN(endKm)) return { success: false, message: 'Start KM and End KM must be numbers' }
+  if (endKm < startKm) return { success: false, message: 'End KM cannot be less than Start KM' }
+  const tripKm = Math.round((endKm - startKm) * 100) / 100
+
+  const sh = ensureDriverKmSheet_()
+  const id = 'KM-' + Date.now()
+  sh.appendRow([
+    id, entry.date, entry.employeeId, entry.name || '', entry.vehicle || '',
+    startKm, endKm, tripKm, entry.notes || '', entry.addedBy || '', new Date()
+  ])
+  return { success: true, entryId: id, tripKm }
+}
+
+function deleteDriverKmEntry(entryId) {
+  const sh = getSS().getSheetByName('DriverKM')
+  if (!sh) return { success: false, message: 'No driver KM entries yet' }
+  const vals = sh.getDataRange().getValues()
+  for (let i = 1; i < vals.length; i++) {
+    if (String(vals[i][0]) === String(entryId)) {
+      sh.deleteRow(i + 1)
+      return { success: true }
+    }
+  }
+  return { success: false, message: 'Entry not found' }
+}
+
+function _driverKmRows() {
+  const sh = getSS().getSheetByName('DriverKM')
+  if (!sh) return []
+  const vals = sh.getDataRange().getValues()
+  if (vals.length < 2) return []
+  return rows2obj_(vals).map(r => ({
+    entryId: r.EntryID, date: fmtDate(r.Date), employeeId: String(r.EmployeeID),
+    name: r['Driver Name'], vehicle: r.Vehicle,
+    startKm: parseFloat(r['Start KM']) || 0, endKm: parseFloat(r['End KM']) || 0,
+    tripKm: parseFloat(r['Trip KM']) || 0, notes: r.Notes, addedBy: r['Added By']
+  }))
+}
+
+function getDriverKmLogs(employeeId, fromDate, toDate) {
+  let rows = _driverKmRows()
+  if (employeeId) rows = rows.filter(r => String(r.employeeId) === String(employeeId))
+  if (fromDate) rows = rows.filter(r => r.date >= fromDate)
+  if (toDate) rows = rows.filter(r => r.date <= toDate)
+  rows.sort((a, b) => a.date < b.date ? 1 : (a.date > b.date ? -1 : 0))
+  return { success: true, entries: rows }
+}
+
+// Overall KM per driver, across every vehicle they've ever driven —
+// exactly what a "driver name + lease vehicle km, overall" report needs.
+function getDriverKmSummary() {
+  const rows = _driverKmRows()
+  const byDriver = {}
+  rows.forEach(r => {
+    const key = r.employeeId || normName_(r.name)
+    if (!byDriver[key]) {
+      byDriver[key] = { employeeId: r.employeeId, name: r.name, trips: 0, totalKm: 0, vehicles: new Set(), lastDate: '', lastEndKm: 0 }
+    }
+    const d = byDriver[key]
+    d.trips++
+    d.totalKm += r.tripKm
+    if (r.vehicle) d.vehicles.add(r.vehicle)
+    if (!d.lastDate || r.date > d.lastDate) { d.lastDate = r.date; d.lastEndKm = r.endKm }
+  })
+  const summary = Object.values(byDriver).map(d => ({
+    employeeId: d.employeeId, name: d.name, trips: d.trips,
+    totalKm: Math.round(d.totalKm * 100) / 100,
+    vehicles: Array.from(d.vehicles), lastDate: d.lastDate, lastEndKm: d.lastEndKm
+  })).sort((a, b) => b.totalKm - a.totalKm)
+  return { success: true, summary }
 }
 
 // ─── Employees ────────────────────────────────────────────────────────────────
@@ -1119,6 +1316,11 @@ function syncSalarySheet_(year, month) {
     })
   })
 
+  // Every Advance/Penalty/Gas/Food/Rice/Custom entry on file for this
+  // month, summed per employee — this becomes the Advance column below,
+  // so Net Salary always reflects the full deductions ledger automatically.
+  const deductionTotals = deductionTotalsByName_(year, month)
+
   // Update each employee row in salary sheet — build the whole block in memory
   // and write it in ONE setValues() call instead of 11 separate .setValue()
   // calls per row. Per-cell writes for every employee, on every single mark,
@@ -1126,6 +1328,7 @@ function syncSalarySheet_(year, month) {
   const numRows = salVals.length - 1
   if (numRows > 0) {
     const salaryCol = []
+    const advanceCol = []
     const block = []
     const naBlock = []
     for (let i = 1; i < salVals.length; i++) {
@@ -1137,7 +1340,7 @@ function syncSalarySheet_(year, month) {
       // were removed from Employees (keeps salary history intact for
       // people no longer employed instead of zeroing them out).
       const monthly = (name in empSalaryByName) ? empSalaryByName[name] : (parseFloat(salVals[i][2]) || 0)
-      const advance = parseFloat(salVals[i][3]) || 0
+      const advance = deductionTotals[name] || 0
       const perDay = workDays > 0 ? monthly / workDays : 0
       // WO (Week Off) is paid leave, same as a normal working day — it
       // counts toward Paid Days alongside P (Present) and WOP (Worked on
@@ -1152,11 +1355,14 @@ function syncSalarySheet_(year, month) {
       const warning = t.A > 3 ? 'EXCESS ABSENT' : 'OK'
 
       salaryCol.push([monthly])
+      advanceCol.push([advance])
       block.push([workDays, t.P, t.A, t.WO, t.WOP, paidDays, perDay, gross, net, warning])
       naBlock.push([t.NA || 0])
     }
     // Column 3 = Monthly Salary (kept in sync with the Employees sheet)
     salSh.getRange(2, 3, numRows, 1).setValues(salaryCol)
+    // Column 4 = Advance (now driven entirely by the Deductions ledger)
+    salSh.getRange(2, 4, numRows, 1).setValues(advanceCol)
     // Columns 5..14 = Total Days, P, A, WO, WOP, Paid Days, Per Day, Gross, Net, Warning
     salSh.getRange(2, 5, numRows, 10).setValues(block)
     // Column 15 = NA Count

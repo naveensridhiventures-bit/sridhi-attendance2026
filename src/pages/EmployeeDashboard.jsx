@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { getMonthlyAttendance, applyLeave, getLeaveRequests } from '../api/sheetApi.js'
+import { getMonthlyAttendance, applyLeave, getLeaveRequests, getEmployeeSalary, getDeductionsForEmployee } from '../api/sheetApi.js'
 import QRCodeDisplay from '../components/QRCodeDisplay.jsx'
 
 const STATUS_STYLE = {
@@ -20,6 +20,9 @@ export default function EmployeeDashboard() {
   const [showLeaveForm, setShowLeaveForm] = useState(false)
   const [leaveForm, setLeaveForm] = useState({ type: 'leave', fromDate: '', toDate: '', reason: '' })
   const [submittingLeave, setSubmittingLeave] = useState(false)
+  const [salary, setSalary] = useState(null)
+  const [deductions, setDeductions] = useState([])
+  const [loadingSalary, setLoadingSalary] = useState(true)
 
   useEffect(() => {
     const stored = sessionStorage.getItem('dashboardEmployee')
@@ -34,8 +37,26 @@ export default function EmployeeDashboard() {
     if (!employee) return
     loadCalendar()
     loadLeaves()
+    loadSalary()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [employee, month])
+
+  async function loadSalary() {
+    setLoadingSalary(true)
+    try {
+      const y = month.getFullYear(), m = month.getMonth() + 1
+      const [salRes, dedRes] = await Promise.all([
+        getEmployeeSalary(employee.employeeId, y, m),
+        getDeductionsForEmployee(employee.employeeId, y, m)
+      ])
+      setSalary(salRes.salary || null)
+      setDeductions(dedRes.entries || [])
+    } catch (e) {
+      console.error(e)
+    } finally {
+      setLoadingSalary(false)
+    }
+  }
 
   async function loadCalendar() {
     setLoadingCal(true)
@@ -151,6 +172,58 @@ export default function EmployeeDashboard() {
               <Legend color="bg-gold-500" label={`Week Off (${summary.weekoff})`} />
               <Legend color="bg-rust" label={`N/A (${summary.na})`} />
             </div>
+          </>
+        )}
+      </div>
+
+      {/* Salary */}
+      <div className="bg-white border border-brand-50 rounded-2xl p-4 shadow-card mb-4 animate-popIn">
+        <p className="font-display font-semibold text-ink text-sm mb-3">My Salary · {monthLabel}</p>
+        {loadingSalary ? (
+          <div className="h-24 rounded-xl skeleton" />
+        ) : !salary ? (
+          <p className="text-slate-400 text-xs text-center py-4">No salary data yet for {monthLabel}.</p>
+        ) : (
+          <>
+            <div className="rounded-2xl bg-gradient-to-br from-brand-600 to-brand-800 p-4 cell-pattern mb-3">
+              <p className="text-brand-100 text-xs mb-1">Net Salary</p>
+              <p className="font-display font-bold text-white text-2xl">₹{parseFloat(salary.FinalSalary || 0).toLocaleString('en-IN')}</p>
+              {month.getFullYear() === new Date().getFullYear() && month.getMonth() === new Date().getMonth() && (
+                <p className="text-brand-200 text-[10px] mt-1 flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block"></span>
+                  Live · updates as attendance is marked
+                </p>
+              )}
+            </div>
+            <div className="grid grid-cols-3 gap-1.5 text-center mb-3">
+              <div className="bg-surface rounded-xl py-2">
+                <p className="font-bold text-sm text-ink">₹{parseFloat(salary.MonthlySalary || 0).toLocaleString('en-IN')}</p>
+                <p className="text-[9px] text-slate-400">Base</p>
+              </div>
+              <div className="bg-surface rounded-xl py-2">
+                <p className="font-bold text-sm text-brand-600">₹{parseFloat(salary.EarnedSalary || 0).toLocaleString('en-IN')}</p>
+                <p className="text-[9px] text-slate-400">Earned</p>
+              </div>
+              <div className="bg-surface rounded-xl py-2">
+                <p className="font-bold text-sm text-rust">₹{parseFloat(salary.Deduction || 0).toLocaleString('en-IN')}</p>
+                <p className="text-[9px] text-slate-400">Deductions</p>
+              </div>
+            </div>
+
+            {deductions.length > 0 && (
+              <div className="space-y-1.5">
+                <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide px-0.5">Deduction Details</p>
+                {deductions.map((d) => (
+                  <div key={d.entryId} className="flex items-center justify-between bg-rust/5 rounded-xl px-3 py-2">
+                    <div className="min-w-0">
+                      <p className="text-xs font-medium text-ink truncate">{d.category}</p>
+                      <p className="text-[10px] text-slate-400">{d.date}{d.note ? ' · ' + d.note : ''}</p>
+                    </div>
+                    <p className="text-xs font-bold text-rust shrink-0">₹{d.amount.toLocaleString('en-IN')}</p>
+                  </div>
+                ))}
+              </div>
+            )}
           </>
         )}
       </div>

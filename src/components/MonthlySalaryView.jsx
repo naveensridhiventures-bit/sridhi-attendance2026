@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { getMonthlySalary, getMonthlyTabsList } from '../api/sheetApi.js'
+import { downloadExcel, downloadPdf } from '../utils/reportExport.js'
 
 const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
 
@@ -34,6 +35,57 @@ export default function MonthlySalaryView() {
     (r.EmployeeID || '').toLowerCase().includes(search.toLowerCase())
   )
   const totalPayroll = filtered.reduce((s, r) => s + (parseFloat(r.FinalSalary) || 0), 0)
+
+  function downloadAttendanceExcel() {
+    downloadExcel(
+      `Attendance-${label}`,
+      `Attendance Report — ${label}`,
+      ['Employee', 'ID', 'Type', 'Present', 'Absent', 'Week Off', 'WOP', 'NA', 'Total Days', 'Paid Days'],
+      filtered.map(r => [r.Name, r.EmployeeID, r.Type, r.Present, r.Absent, r.WeekOff, r.WOP, r.NA, r.TotalDays, r.PaidDays])
+    )
+  }
+
+  function downloadAttendancePdf() {
+    downloadPdf(
+      `Attendance Report — ${label}`,
+      `Sridhi Ventures · Generated ${new Date().toLocaleDateString('en-IN')}`,
+      ['Employee', 'ID', 'Present', 'Absent', 'Week Off', 'WOP', 'NA', 'Paid Days'],
+      filtered.map(r => [r.Name, r.EmployeeID, r.Present, r.Absent, r.WeekOff, r.WOP, r.NA, r.PaidDays]),
+      [
+        { label: 'Employees', value: String(filtered.length) },
+        { label: 'Month', value: label }
+      ]
+    )
+  }
+
+  function downloadSalaryExcel() {
+    downloadExcel(
+      `Salary-${label}`,
+      `Salary Sheet — ${label}`,
+      ['Employee', 'ID', 'Type', 'Monthly Salary', 'Earned', 'Deduction', 'Net Salary', 'Present', 'Absent'],
+      filtered.map(r => [r.Name, r.EmployeeID, r.Type, r.MonthlySalary, r.EarnedSalary, r.Deduction, r.FinalSalary, r.Present, r.Absent])
+    )
+  }
+
+  function downloadSalaryPdf() {
+    downloadPdf(
+      `Salary Report — ${label}`,
+      `Sridhi Ventures · Generated ${new Date().toLocaleDateString('en-IN')}`,
+      ['Employee', 'ID', 'Monthly', 'Earned', 'Deduction', 'Net Salary'],
+      filtered.map(r => [
+        r.Name, r.EmployeeID,
+        '₹' + parseFloat(r.MonthlySalary || 0).toLocaleString('en-IN'),
+        '₹' + parseFloat(r.EarnedSalary || 0).toLocaleString('en-IN'),
+        '₹' + parseFloat(r.Deduction || 0).toLocaleString('en-IN'),
+        '₹' + parseFloat(r.FinalSalary || 0).toLocaleString('en-IN')
+      ]),
+      [
+        { label: 'Total Payroll', value: '₹' + totalPayroll.toLocaleString('en-IN') },
+        { label: 'Employees', value: String(filtered.length) },
+        { label: 'Month', value: label }
+      ]
+    )
+  }
 
   return (
     <div className="space-y-4">
@@ -91,6 +143,22 @@ export default function MonthlySalaryView() {
                 Live · updates as attendance is marked
               </p>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Report downloads */}
+      {!loading && rows.length > 0 && (
+        <div className="grid grid-cols-2 gap-2">
+          <div className="bg-white border border-brand-50 rounded-2xl p-3 shadow-card space-y-1.5">
+            <p className="text-[11px] font-semibold text-ink px-0.5">📅 Attendance Report</p>
+            <button onClick={downloadAttendancePdf} className="w-full text-[11px] font-semibold py-2 rounded-xl bg-brand-50 text-brand-700 border border-brand-200">⬇ PDF</button>
+            <button onClick={downloadAttendanceExcel} className="w-full text-[11px] font-semibold py-2 rounded-xl bg-surface text-slate-600 border border-brand-100">⬇ Excel</button>
+          </div>
+          <div className="bg-white border border-brand-50 rounded-2xl p-3 shadow-card space-y-1.5">
+            <p className="text-[11px] font-semibold text-ink px-0.5">₹ Salary Report</p>
+            <button onClick={downloadSalaryPdf} className="w-full text-[11px] font-semibold py-2 rounded-xl bg-brand-50 text-brand-700 border border-brand-200">⬇ PDF</button>
+            <button onClick={downloadSalaryExcel} className="w-full text-[11px] font-semibold py-2 rounded-xl bg-surface text-slate-600 border border-brand-100">⬇ Excel</button>
           </div>
         </div>
       )}

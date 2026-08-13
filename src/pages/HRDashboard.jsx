@@ -8,6 +8,8 @@ import MonthlySalaryView from '../components/MonthlySalaryView.jsx'
 import LogsView from '../components/LogsView.jsx'
 import AbsenteeWhatsApp from '../components/AbsenteeWhatsApp.jsx'
 import EditAttendanceByDate from '../components/EditAttendanceByDate.jsx'
+import DeductionsManager from '../components/DeductionsManager.jsx'
+import DriverKmManager from '../components/DriverKmManager.jsx'
 
 export default function HRDashboard() {
   const showToast = useToast()
@@ -106,6 +108,8 @@ export default function HRDashboard() {
         {[
           { key: 'salary',   label: 'Salary',   icon: '₹' },
           { key: 'editatt',  label: 'Edit Att.', icon: '🗓️' },
+          { key: 'deduct',   label: 'Advance',  icon: '💵' },
+          { key: 'driverkm', label: 'Driver KM', icon: '🚚' },
           { key: 'leave',    label: 'Leave',    icon: '📋' },
           { key: 'logs',     label: 'Logs',     icon: '🕒' },
           { key: 'hero',     label: 'Hero',     icon: '🖼' },
@@ -177,6 +181,18 @@ export default function HRDashboard() {
       {tab === 'editatt' && (
         <div className="animate-popIn">
           <EditAttendanceByDate employees={employees} />
+        </div>
+      )}
+
+      {tab === 'deduct' && (
+        <div className="animate-popIn">
+          <DeductionsManager employees={employees} hrName={employee?.name} />
+        </div>
+      )}
+
+      {tab === 'driverkm' && (
+        <div className="animate-popIn">
+          <DriverKmManager employees={employees} hrName={employee?.name} />
         </div>
       )}
 

@@ -104,3 +104,15 @@ export const getLogs              = (limit, employeeId)          => callApi('get
 export const getAbsenteesToday    = ()                           => callApi('getAbsenteesToday')
 export const getHrWhatsappNumber  = ()                           => callApi('getHrWhatsappNumber')
 export const setHrWhatsappNumber  = (number)                     => callApi('setHrWhatsappNumber', { number })
+
+// ---------- Deductions (Advance / Penalty / Gas / Food / Rice / Custom) ----------
+export const addDeduction              = (entry)                          => callApi('addDeduction', { entry })
+export const getDeductionsForEmployee  = (employeeId, year, month)        => callApi('getDeductionsForEmployee', { employeeId, year, month })
+export const getAllDeductionsForMonth  = (year, month)                    => callApi('getAllDeductionsForMonth', { year, month })
+export const deleteDeduction           = (entryId)                        => callApi('deleteDeduction', { entryId })
+
+// ---------- Driver KM ----------
+export const addDriverKm         = (entry)                                => callApi('addDriverKm', { entry })
+export const getDriverKmLogs     = (employeeId, fromDate, toDate)         => callApi('getDriverKmLogs', { employeeId, fromDate, toDate })
+export const getDriverKmSummary  = ()                                     => callApi('getDriverKmSummary')
+export const deleteDriverKmEntry = (entryId)                              => callApi('deleteDriverKmEntry', { entryId })
