@@ -11,6 +11,7 @@ import EditAttendanceByDate from '../components/EditAttendanceByDate.jsx'
 import DeductionsManager from '../components/DeductionsManager.jsx'
 import DriverKmManager from '../components/DriverKmManager.jsx'
 import PermissionsManager from '../components/PermissionsManager.jsx'
+import MarkPermissionByDate from '../components/MarkPermissionByDate.jsx'
 
 export default function HRDashboard() {
   const showToast = useToast()
@@ -24,6 +25,7 @@ export default function HRDashboard() {
   const [editingId, setEditingId] = useState(null)
   const [editValue, setEditValue] = useState('')
   const [savingId, setSavingId] = useState(null)
+  const [permSubTab, setPermSubTab] = useState('mark') // 'mark' | 'history'
 
   useEffect(() => {
     const stored = sessionStorage.getItem('dashboardEmployee')
@@ -238,8 +240,23 @@ export default function HRDashboard() {
       )}
 
       {tab === 'perm' && (
-        <div className="animate-popIn">
-          <PermissionsManager />
+        <div className="animate-popIn space-y-3">
+          <div className="grid grid-cols-2 gap-1.5 bg-white p-1.5 rounded-2xl border border-brand-100 shadow-card">
+            <button
+              onClick={() => setPermSubTab('mark')}
+              className={`py-2 rounded-xl text-xs font-semibold transition-all ${permSubTab === 'mark' ? 'bg-brand-500 text-white shadow-soft' : 'text-slate-500'}`}
+            >
+              Mark Permission
+            </button>
+            <button
+              onClick={() => setPermSubTab('history')}
+              className={`py-2 rounded-xl text-xs font-semibold transition-all ${permSubTab === 'history' ? 'bg-brand-500 text-white shadow-soft' : 'text-slate-500'}`}
+            >
+              History
+            </button>
+          </div>
+          {permSubTab === 'mark' && <MarkPermissionByDate employees={employees} />}
+          {permSubTab === 'history' && <PermissionsManager />}
         </div>
       )}
 
