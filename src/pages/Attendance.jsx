@@ -14,6 +14,11 @@ import BulkAttendance from '../components/BulkAttendance.jsx'
 const REASONS = ['Personal Work', 'Medical / Health', 'Family Emergency', 'Bank / Govt Work', 'Vehicle Issue', 'Other']
 const HOURS = ['30m', '1 HR', '2 HRS', '3 HRS', '4 HRS']
 
+function todayISO() {
+  const d = new Date()
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0')
+}
+
 export default function Attendance() {
   const showToast = useToast()
   const [confettiTrigger, setConfettiTrigger] = useState(0)
@@ -34,6 +39,7 @@ export default function Attendance() {
 
   // permission flow
   const [permId, setPermId] = useState('')
+  const [permDate, setPermDate] = useState(todayISO())
   const [permReason, setPermReason] = useState(REASONS[0])
   const [permHours, setPermHours] = useState(HOURS[1])
   const [permSubmitting, setPermSubmitting] = useState(false)
@@ -120,6 +126,10 @@ export default function Attendance() {
       setToast({ ok: false, message: 'Choose an employee for the permission entry.' })
       return
     }
+    if (!permDate) {
+      setToast({ ok: false, message: 'Pick a date for the permission entry.' })
+      return
+    }
     setPermSubmitting(true)
     try {
       const emp = employees.find((e) => e.employeeId === permId)
@@ -127,13 +137,15 @@ export default function Attendance() {
         employeeId: permId,
         name: emp?.name || '',
         type: 'permission',
-        fromDate: new Date().toISOString().slice(0, 10),
+        fromDate: permDate,
         toDate: '',
         reason: `${permReason} - ${permHours}`
       })
-      setToast({ ok: true, message: `Permission recorded for ${emp?.name}` })
-      showToast(`Permission recorded for ${emp?.name}`, 'info')
+      const dateLabel = permDate === todayISO() ? 'today' : permDate
+      setToast({ ok: true, message: `Permission recorded for ${emp?.name} (${dateLabel})` })
+      showToast(`Permission recorded for ${emp?.name} (${dateLabel})`, 'info')
       setPermId('')
+      setPermDate(todayISO())
     } catch (e) {
       setToast({ ok: false, message: e.message })
       showToast(e.message, 'error')
@@ -318,7 +330,22 @@ export default function Attendance() {
               <span className="text-lg">⏱</span>
               <p className="font-display font-semibold text-sm">Mark Permission</p>
             </div>
-            <p className="text-xs text-slate-400 -mt-2">Record early leave or late arrival hours for an employee.</p>
+            <p className="text-xs text-slate-400 -mt-2">Record early leave or late arrival hours for an employee — pick any date, past or future, same as Edit Attendance.</p>
+
+            <div>
+              <label className="block text-xs text-slate-500 mb-1.5 font-semibold uppercase tracking-wide">Date</label>
+              <input
+                type="date"
+                value={permDate}
+                onChange={(e) => setPermDate(e.target.value)}
+                className="input"
+              />
+              {permDate && permDate !== todayISO() && (
+                <p className="text-[10px] text-gold-600 mt-1">
+                  {permDate < todayISO() ? '📅 Backfilling a missed permission' : '📅 Marking a future permission'} for {permDate}
+                </p>
+              )}
+            </div>
 
             <div>
               <label className="block text-xs text-slate-500 mb-1.5 font-semibold uppercase tracking-wide">Employee Name</label>

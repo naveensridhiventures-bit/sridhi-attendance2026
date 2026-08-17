@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { getMonthlyAttendance, applyLeave, getLeaveRequests, getEmployeeSalary, getDeductionsForEmployee } from '../api/sheetApi.js'
+import { getMonthlyAttendance, applyLeave, getLeaveRequests, getEmployeeSalary, getDeductionsForEmployee, getPermissionsForEmployeeMonth } from '../api/sheetApi.js'
 import QRCodeDisplay from '../components/QRCodeDisplay.jsx'
 
 const STATUS_STYLE = {
@@ -8,6 +8,14 @@ const STATUS_STYLE = {
   weekoff: 'bg-gold-500 text-white',
   na: 'bg-rust text-white',
   absent: 'bg-slate-300 text-slate-600'
+}
+
+const PERM_REASONS = ['Personal Work', 'Medical / Health', 'Family Emergency', 'Bank / Govt Work', 'Vehicle Issue', 'Other']
+const PERM_HOURS = ['30m', '1 HR', '2 HRS', '3 HRS', '4 HRS']
+
+function todayISO() {
+  const d = new Date()
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0')
 }
 
 export default function EmployeeDashboard() {
@@ -18,8 +26,10 @@ export default function EmployeeDashboard() {
   const [loadingCal, setLoadingCal] = useState(true)
   const [leaveRequests, setLeaveRequests] = useState([])
   const [showLeaveForm, setShowLeaveForm] = useState(false)
-  const [leaveForm, setLeaveForm] = useState({ type: 'leave', fromDate: '', toDate: '', reason: '' })
+  const [leaveForm, setLeaveForm] = useState({ type: 'leave', fromDate: '', toDate: '', reason: '', permReason: PERM_REASONS[0], permHours: PERM_HOURS[1] })
   const [submittingLeave, setSubmittingLeave] = useState(false)
+  const [permissionHistory, setPermissionHistory] = useState([])
+  const [loadingPermissions, setLoadingPermissions] = useState(true)
   const [salary, setSalary] = useState(null)
   const [deductions, setDeductions] = useState([])
   const [loadingSalary, setLoadingSalary] = useState(true)
@@ -38,8 +48,21 @@ export default function EmployeeDashboard() {
     loadCalendar()
     loadLeaves()
     loadSalary()
+    loadPermissions()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [employee, month])
+
+  async function loadPermissions() {
+    setLoadingPermissions(true)
+    try {
+      const res = await getPermissionsForEmployeeMonth(employee.employeeId, month.getFullYear(), month.getMonth() + 1)
+      setPermissionHistory(res.requests || [])
+    } catch (e) {
+      console.error(e)
+    } finally {
+      setLoadingPermissions(false)
+    }
+  }
 
   async function loadSalary() {
     setLoadingSalary(true)
@@ -93,10 +116,21 @@ export default function EmployeeDashboard() {
     if (!leaveForm.fromDate) return
     setSubmittingLeave(true)
     try {
-      await applyLeave({ ...leaveForm, employeeId: employee.employeeId, name: employee.name })
-      setLeaveForm({ type: 'leave', fromDate: '', toDate: '', reason: '' })
+      const payload = leaveForm.type === 'permission'
+        ? {
+            employeeId: employee.employeeId, name: employee.name, type: 'permission',
+            fromDate: leaveForm.fromDate, toDate: '',
+            reason: `${leaveForm.permReason} - ${leaveForm.permHours}`
+          }
+        : {
+            employeeId: employee.employeeId, name: employee.name, type: 'leave',
+            fromDate: leaveForm.fromDate, toDate: leaveForm.toDate, reason: leaveForm.reason
+          }
+      await applyLeave(payload)
+      setLeaveForm({ type: 'leave', fromDate: '', toDate: '', reason: '', permReason: PERM_REASONS[0], permHours: PERM_HOURS[1] })
       setShowLeaveForm(false)
       loadLeaves()
+      loadPermissions()
     } catch (e) {
       alert('Failed: ' + e.message)
     } finally {
@@ -253,33 +287,85 @@ export default function EmployeeDashboard() {
                 </button>
               ))}
             </div>
-            <input
-              type="date"
-              required
-              value={leaveForm.fromDate}
-              onChange={(e) => setLeaveForm((f) => ({ ...f, fromDate: e.target.value }))}
-              className="input"
-            />
-            <input
-              type="date"
-              value={leaveForm.toDate}
-              onChange={(e) => setLeaveForm((f) => ({ ...f, toDate: e.target.value }))}
-              className="input"
-              placeholder="To date (optional)"
-            />
-            <textarea
-              value={leaveForm.reason}
-              onChange={(e) => setLeaveForm((f) => ({ ...f, reason: e.target.value }))}
-              className="input"
-              rows={2}
-              placeholder="Reason"
-            />
+
+            <div>
+              <input
+                type="date"
+                required
+                value={leaveForm.fromDate}
+                onChange={(e) => setLeaveForm((f) => ({ ...f, fromDate: e.target.value }))}
+                className="input"
+              />
+              {leaveForm.type === 'permission' && leaveForm.fromDate && leaveForm.fromDate !== todayISO() && (
+                <p className="text-[10px] text-gold-600 mt-1">
+                  {leaveForm.fromDate < todayISO() ? '📅 Reporting a missed permission' : '📅 Requesting a future permission'} for {leaveForm.fromDate}
+                </p>
+              )}
+            </div>
+
+            {leaveForm.type === 'leave' ? (
+              <>
+                <input
+                  type="date"
+                  value={leaveForm.toDate}
+                  onChange={(e) => setLeaveForm((f) => ({ ...f, toDate: e.target.value }))}
+                  className="input"
+                  placeholder="To date (optional)"
+                />
+                <textarea
+                  value={leaveForm.reason}
+                  onChange={(e) => setLeaveForm((f) => ({ ...f, reason: e.target.value }))}
+                  className="input"
+                  rows={2}
+                  placeholder="Reason"
+                />
+              </>
+            ) : (
+              <>
+                <div>
+                  <label className="block text-[10px] text-slate-500 mb-1 font-semibold uppercase tracking-wide">Reason</label>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    {PERM_REASONS.map((r) => (
+                      <button
+                        type="button"
+                        key={r}
+                        onClick={() => setLeaveForm((f) => ({ ...f, permReason: r }))}
+                        className={`py-2 rounded-xl text-[10.5px] font-semibold border transition-all ${
+                          leaveForm.permReason === r ? 'bg-brand-500 text-white border-brand-500' : 'bg-surface text-slate-500 border-brand-100'
+                        }`}
+                      >
+                        {r}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-[10px] text-slate-500 mb-1 font-semibold uppercase tracking-wide">No. of Hours</label>
+                  <div className="grid grid-cols-5 gap-1.5">
+                    {PERM_HOURS.map((h) => (
+                      <button
+                        type="button"
+                        key={h}
+                        onClick={() => setLeaveForm((f) => ({ ...f, permHours: h }))}
+                        className={`py-2 rounded-xl text-[10px] font-bold border transition-all ${
+                          leaveForm.permHours === h ? 'bg-gold-500 text-white border-gold-500' : 'bg-surface text-slate-500 border-brand-100'
+                        }`}
+                      >
+                        {h}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </>
+            )}
+
             <button type="submit" disabled={submittingLeave} className="w-full btn-primary py-2.5 text-sm">
               {submittingLeave ? 'Submitting…' : 'Submit Request'}
             </button>
           </form>
         )}
 
+        <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide px-0.5 mb-1.5">Leave Requests</p>
         <div className="space-y-2">
           {leaveRequests.map((r) => (
             <div key={r.requestId} className="flex items-center justify-between bg-surface rounded-xl p-2.5 text-xs">
@@ -296,7 +382,34 @@ export default function EmployeeDashboard() {
               </span>
             </div>
           ))}
-          {leaveRequests.length === 0 && <p className="text-slate-400 text-xs text-center py-3">No requests yet.</p>}
+          {leaveRequests.length === 0 && <p className="text-slate-400 text-xs text-center py-3">No leave requests yet.</p>}
+        </div>
+
+        <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide px-0.5 mb-1.5 mt-4">
+          Permission Requests · {month.toLocaleDateString('en-IN', { month: 'short', year: 'numeric' })}
+        </p>
+        <div className="space-y-2">
+          {loadingPermissions && <div className="h-12 rounded-xl skeleton" />}
+          {!loadingPermissions && permissionHistory.map((r) => (
+            <div key={r.requestId} className="flex items-center justify-between bg-surface rounded-xl p-2.5 text-xs">
+              <div>
+                <p className="font-medium text-ink">{r.date}{r.hours ? ` · ${r.hours}` : ''}</p>
+                <p className="text-slate-400">{r.reason}</p>
+              </div>
+              <span
+                className={`px-2 py-1 rounded-full font-semibold text-[10px] capitalize ${
+                  r.status === 'approved' ? 'bg-brand-100 text-brand-700' : r.status === 'rejected' ? 'bg-rust/10 text-rust' : 'bg-gold-500/15 text-gold-500'
+                }`}
+              >
+                {r.status}
+              </span>
+            </div>
+          ))}
+          {!loadingPermissions && permissionHistory.length === 0 && (
+            <p className="text-slate-400 text-xs text-center py-3">
+              No permission requests for this month. Use the calendar arrows above to check other months.
+            </p>
+          )}
         </div>
       </div>
 

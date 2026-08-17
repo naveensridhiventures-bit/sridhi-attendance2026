@@ -130,6 +130,7 @@ function route_(body) {
   if (a === 'deleteDriverKmEntry')   return deleteDriverKmEntry(body.entryId)
   if (a === 'updateDriverKmEntry')   return updateDriverKmEntry(body.entryId, body.entry)
   if (a === 'getPermissionsForMonth') return getPermissionsForMonth(body.year, body.month)
+  if (a === 'getPermissionsForEmployeeMonth') return getPermissionsForEmployeeMonth(body.employeeId, body.year, body.month)
   if (a === 'updatePermissionStatus') return updatePermissionStatus(body.requestId, body.year, body.month, body.status, body.remarks)
   if (a === 'deletePermissionEntry') return deletePermissionEntry(body.requestId, body.year, body.month)
   return { success: false, message: 'Unknown action: ' + a }
@@ -1485,11 +1486,21 @@ function dashboardLogin(employeeId, password) {
 
 function applyLeave(request) {
   if (!request?.employeeId || !request?.fromDate) return { success: false, message: 'Employee and fromDate required' }
-  const ym = currentYM()
   const isPermission = request.type === 'permission'
 
   if (isPermission) {
-    const sh = getSS().getSheetByName(permTabName(ym.year, ym.month))
+    // File this into the permission sheet for whichever month the CHOSEN
+    // date actually falls in — not always the current month. This is what
+    // makes past ("missed") and future permission dates work correctly;
+    // previously every entry landed in today's month sheet regardless of
+    // what date was picked, silently mismatching the record.
+    const parts = String(request.fromDate).split('-') // 'YYYY-MM-DD'
+    const targetYear = parseInt(parts[0], 10)
+    const targetMonth = parseInt(parts[1], 10)
+    if (!targetYear || !targetMonth) return { success: false, message: 'Invalid date' }
+
+    ensureMonthlyTabs(targetYear, targetMonth) // creates that month's tabs if they don't exist yet (e.g. a future month)
+    const sh = getSS().getSheetByName(permTabName(targetYear, targetMonth))
     if (!sh) return { success: false, message: 'Permission sheet not ready' }
     const id = 'PM-' + Date.now()
     sh.appendRow([id, request.employeeId, request.name || '', request.fromDate,
@@ -1525,6 +1536,15 @@ function getPermissionsForMonth(year, month) {
     status: r.Status, appliedAt: r.AppliedAt, remarks: r.Remarks
   })).sort((a, b) => a.appliedAt < b.appliedAt ? 1 : -1)
   return { success: true, requests }
+}
+
+// Same data as getPermissionsForMonth() but filtered to one employee —
+// this is what the Employee Dashboard calls, so a person only ever sees
+// their own permission history, never anyone else's reasons.
+function getPermissionsForEmployeeMonth(employeeId, year, month) {
+  const res = getPermissionsForMonth(year, month)
+  if (!res.success) return res
+  return { success: true, requests: res.requests.filter(r => String(r.employeeId) === String(employeeId)) }
 }
 
 function updatePermissionStatus(requestId, year, month, status, remarks) {
