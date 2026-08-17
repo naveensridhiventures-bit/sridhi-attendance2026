@@ -116,3 +116,9 @@ export const addDriverKm         = (entry)                                => cal
 export const getDriverKmLogs     = (employeeId, fromDate, toDate)         => callApi('getDriverKmLogs', { employeeId, fromDate, toDate })
 export const getDriverKmSummary  = ()                                     => callApi('getDriverKmSummary')
 export const deleteDriverKmEntry = (entryId)                              => callApi('deleteDriverKmEntry', { entryId })
+export const updateDriverKmEntry = (entryId, entry)                       => callApi('updateDriverKmEntry', { entryId, entry })
+
+// ---------- Permission history (HR view/manage past entries) ----------
+export const getPermissionsForMonth = (year, month)                                  => callApi('getPermissionsForMonth', { year, month })
+export const updatePermissionStatus = (requestId, year, month, status, remarks = '')  => callApi('updatePermissionStatus', { requestId, year, month, status, remarks })
+export const deletePermissionEntry  = (requestId, year, month)                        => callApi('deletePermissionEntry', { requestId, year, month })

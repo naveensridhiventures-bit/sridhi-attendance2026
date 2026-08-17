@@ -44,7 +44,7 @@ const LIGHTWEIGHT_ACTIONS = new Set([
   'dashboardLogin', 'hrLogin',
   'getHrWhatsappNumber', 'setHrWhatsappNumber',
   'addDeduction', 'getDeductionsForEmployee', 'getAllDeductionsForMonth', 'deleteDeduction',
-  'addDriverKm', 'getDriverKmLogs', 'getDriverKmSummary', 'deleteDriverKmEntry'
+  'addDriverKm', 'getDriverKmLogs', 'getDriverKmSummary', 'deleteDriverKmEntry', 'updateDriverKmEntry'
 ])
 
 function doGet(e) {
@@ -128,6 +128,10 @@ function route_(body) {
   if (a === 'getDriverKmLogs')       return getDriverKmLogs(body.employeeId, body.fromDate, body.toDate)
   if (a === 'getDriverKmSummary')    return getDriverKmSummary()
   if (a === 'deleteDriverKmEntry')   return deleteDriverKmEntry(body.entryId)
+  if (a === 'updateDriverKmEntry')   return updateDriverKmEntry(body.entryId, body.entry)
+  if (a === 'getPermissionsForMonth') return getPermissionsForMonth(body.year, body.month)
+  if (a === 'updatePermissionStatus') return updatePermissionStatus(body.requestId, body.year, body.month, body.status, body.remarks)
+  if (a === 'deletePermissionEntry') return deletePermissionEntry(body.requestId, body.year, body.month)
   return { success: false, message: 'Unknown action: ' + a }
 }
 
@@ -535,6 +539,32 @@ function deleteDriverKmEntry(entryId) {
     if (String(vals[i][0]) === String(entryId)) {
       sh.deleteRow(i + 1)
       return { success: true }
+    }
+  }
+  return { success: false, message: 'Entry not found' }
+}
+
+// Edits an existing trip in place (same row, same EntryID) rather than
+// deleting + re-adding — keeps the row position and CreatedAt intact,
+// and recomputes Trip KM server-side so it can never drift from what's
+// actually saved, same as when the entry was first added.
+function updateDriverKmEntry(entryId, entry) {
+  const sh = getSS().getSheetByName('DriverKM')
+  if (!sh) return { success: false, message: 'No driver KM entries yet' }
+  const startKm = parseFloat(entry.startKm)
+  const endKm = parseFloat(entry.endKm)
+  if (isNaN(startKm) || isNaN(endKm)) return { success: false, message: 'Start KM and End KM must be numbers' }
+  if (endKm < startKm) return { success: false, message: 'End KM cannot be less than Start KM' }
+  const tripKm = Math.round((endKm - startKm) * 100) / 100
+
+  const vals = sh.getDataRange().getValues()
+  for (let i = 1; i < vals.length; i++) {
+    if (String(vals[i][0]) === String(entryId)) {
+      sh.getRange(i + 1, 2, 1, 8).setValues([[
+        entry.date, entry.employeeId, entry.name || '', entry.vehicle || '',
+        startKm, endKm, tripKm, entry.notes || ''
+      ]])
+      return { success: true, tripKm }
     }
   }
   return { success: false, message: 'Entry not found' }
@@ -1473,6 +1503,57 @@ function applyLeave(request) {
       request.fromDate, request.toDate || '', request.reason || '', 'pending', new Date(), ''])
     return { success: true, requestId: id }
   }
+}
+
+// ─── Permission history (HR view of past Permission entries) ──────────────────
+// Permission entries are appended into a per-month sheet ("<Month>-<Year>
+// permission") whenever someone submits one from the Attendance page, but
+// until now nothing ever read that sheet back — HR had no way to see,
+// approve/reject, or correct a permission entry once it was submitted.
+// This mirrors the Edit-Attendance-by-date pattern: pick a month, see
+// everything, act on it.
+
+function getPermissionsForMonth(year, month) {
+  const ym = (year && month) ? { year, month } : currentYM()
+  const sh = getSS().getSheetByName(permTabName(ym.year, ym.month))
+  if (!sh) return { success: true, requests: [] }
+  const vals = sh.getDataRange().getValues()
+  if (vals.length < 2) return { success: true, requests: [] }
+  const requests = rows2obj_(vals).map(r => ({
+    requestId: r.RequestID, employeeId: String(r.EmployeeID), name: r['Employee Name'],
+    date: fmtDate(r.Date), hours: r.Hours, reason: r.Reason,
+    status: r.Status, appliedAt: r.AppliedAt, remarks: r.Remarks
+  })).sort((a, b) => a.appliedAt < b.appliedAt ? 1 : -1)
+  return { success: true, requests }
+}
+
+function updatePermissionStatus(requestId, year, month, status, remarks) {
+  const ym = (year && month) ? { year, month } : currentYM()
+  const sh = getSS().getSheetByName(permTabName(ym.year, ym.month))
+  if (!sh) return { success: false, message: 'Permission sheet not found for that month' }
+  const vals = sh.getDataRange().getValues()
+  for (let i = 1; i < vals.length; i++) {
+    if (String(vals[i][0]) === String(requestId)) {
+      sh.getRange(i + 1, 7).setValue(status)          // Status column
+      if (remarks !== undefined) sh.getRange(i + 1, 9).setValue(remarks) // Remarks column
+      return { success: true }
+    }
+  }
+  return { success: false, message: 'Permission entry not found' }
+}
+
+function deletePermissionEntry(requestId, year, month) {
+  const ym = (year && month) ? { year, month } : currentYM()
+  const sh = getSS().getSheetByName(permTabName(ym.year, ym.month))
+  if (!sh) return { success: false, message: 'Permission sheet not found for that month' }
+  const vals = sh.getDataRange().getValues()
+  for (let i = 1; i < vals.length; i++) {
+    if (String(vals[i][0]) === String(requestId)) {
+      sh.deleteRow(i + 1)
+      return { success: true }
+    }
+  }
+  return { success: false, message: 'Permission entry not found' }
 }
 
 function getLeaveRequests(employeeId) {

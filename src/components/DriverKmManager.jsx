@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import { addDriverKm, deleteDriverKmEntry, getDriverKmLogs, getDriverKmSummary } from '../api/sheetApi.js'
+import { addDriverKm, deleteDriverKmEntry, getDriverKmLogs, getDriverKmSummary, updateDriverKmEntry } from '../api/sheetApi.js'
 import { useToast } from './Toast.jsx'
 import EmployeePicker from './EmployeePicker.jsx'
 import { downloadExcel, downloadPdf } from '../utils/reportExport.js'
@@ -7,6 +7,20 @@ import { downloadExcel, downloadPdf } from '../utils/reportExport.js'
 function todayStr() {
   const d = new Date()
   return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0')
+}
+
+// Remembers which vehicle each driver last used, in the browser's local
+// storage — purely a convenience so HR doesn't have to retype the same
+// vehicle number every time the same driver is picked. Not synced to the
+// sheet; it's just a per-device autofill shortcut.
+const VEHICLE_KEY_PREFIX = 'driverKm:lastVehicle:'
+function rememberVehicle(employeeId, vehicle) {
+  if (!employeeId || !vehicle) return
+  try { localStorage.setItem(VEHICLE_KEY_PREFIX + employeeId, vehicle) } catch (_) {}
+}
+function recallVehicle(employeeId) {
+  if (!employeeId) return ''
+  try { return localStorage.getItem(VEHICLE_KEY_PREFIX + employeeId) || '' } catch (_) { return '' }
 }
 
 export default function DriverKmManager({ employees, hrName }) {
@@ -23,6 +37,15 @@ export default function DriverKmManager({ employees, hrName }) {
   const [endKm, setEndKm] = useState('')
   const [notes, setNotes] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  const [editingId, setEditingId] = useState(null) // entryId currently being edited, or null when adding new
+
+  // Only people whose Role/Designation mentions "driver" show up here —
+  // keeps the picker short and on-target instead of listing the whole
+  // workforce for a KM entry that's only ever logged for drivers.
+  const drivers = useMemo(
+    () => employees.filter((e) => (e.role || '').toLowerCase().includes('driver')),
+    [employees]
+  )
 
   useEffect(() => { loadAll() }, [])
   useEffect(() => { loadLogs() }, [filterDriver])
@@ -61,6 +84,35 @@ export default function DriverKmManager({ employees, hrName }) {
     return Math.round((e - s) * 100) / 100
   }, [startKm, endKm])
 
+  // Whenever a different driver is picked, auto-fill the vehicle field
+  // with whatever they were driving last time — only when adding a new
+  // entry (editing an existing one keeps that entry's own saved vehicle).
+  function onDriverChange(id) {
+    setEmployeeId(id)
+    if (!editingId) setVehicle(recallVehicle(id))
+  }
+
+  function resetForm() {
+    setEditingId(null)
+    setEmployeeId('')
+    setVehicle('')
+    setDate(todayStr())
+    setStartKm('')
+    setEndKm('')
+    setNotes('')
+  }
+
+  function startEdit(l) {
+    setEditingId(l.entryId)
+    setEmployeeId(l.employeeId)
+    setVehicle(l.vehicle || '')
+    setDate(l.date)
+    setStartKm(String(l.startKm))
+    setEndKm(String(l.endKm))
+    setNotes(l.notes || '')
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
   async function submit() {
     if (!employeeId) { showToast('Choose a driver first.', 'error'); return }
     const s = parseFloat(startKm), e = parseFloat(endKm)
@@ -69,14 +121,20 @@ export default function DriverKmManager({ employees, hrName }) {
     const emp = employees.find((x) => x.employeeId === employeeId)
     setSubmitting(true)
     try {
-      await addDriverKm({
-        employeeId, name: emp?.name || '', vehicle, date,
-        startKm: s, endKm: e, notes, addedBy: hrName || 'HR'
-      })
-      showToast(`${tripKm} km logged for ${emp?.name}`, 'success')
-      setStartKm('')
-      setEndKm('')
-      setNotes('')
+      if (editingId) {
+        await updateDriverKmEntry(editingId, {
+          employeeId, name: emp?.name || '', vehicle, date, startKm: s, endKm: e, notes
+        })
+        showToast(`Trip updated — ${tripKm} km for ${emp?.name}`, 'success')
+      } else {
+        await addDriverKm({
+          employeeId, name: emp?.name || '', vehicle, date,
+          startKm: s, endKm: e, notes, addedBy: hrName || 'HR'
+        })
+        showToast(`${tripKm} km logged for ${emp?.name}`, 'success')
+      }
+      rememberVehicle(employeeId, vehicle)
+      resetForm()
       loadAll()
     } catch (e2) {
       showToast('Failed: ' + e2.message, 'error')
@@ -89,6 +147,7 @@ export default function DriverKmManager({ employees, hrName }) {
     try {
       await deleteDriverKmEntry(entryId)
       setLogs((list) => list.filter((l) => l.entryId !== entryId))
+      if (editingId === entryId) resetForm()
       loadAll()
       showToast('Entry removed', 'info')
     } catch (e) {
@@ -122,13 +181,24 @@ export default function DriverKmManager({ employees, hrName }) {
 
   return (
     <div className="space-y-4">
-      {/* Log a trip */}
+      {/* Log / edit a trip */}
       <div className="bg-white border border-brand-50 rounded-2xl p-4 shadow-card space-y-3">
-        <p className="font-display font-semibold text-ink text-sm">Log Driver KM</p>
+        <div className="flex items-center justify-between">
+          <p className="font-display font-semibold text-ink text-sm">{editingId ? 'Edit Trip' : 'Log Driver KM'}</p>
+          {editingId && (
+            <button onClick={resetForm} className="text-[11px] font-semibold text-slate-400">Cancel edit</button>
+          )}
+        </div>
 
         <div>
           <label className="block text-xs text-slate-500 mb-1.5 font-semibold uppercase tracking-wide">Driver</label>
-          <EmployeePicker employees={employees} marked={{}} value={employeeId} onChange={setEmployeeId} placeholder="Choose driver…" />
+          {drivers.length === 0 ? (
+            <p className="text-xs text-rust bg-rust/5 border border-rust/20 rounded-xl px-3 py-2.5">
+              No employee has "Driver" set as their Role yet. Add it via HR → Add Employee → Role / Designation (must contain the word "Driver").
+            </p>
+          ) : (
+            <EmployeePicker employees={drivers} marked={{}} value={employeeId} onChange={onDriverChange} placeholder="Choose driver…" />
+          )}
         </div>
 
         <div>
@@ -144,6 +214,9 @@ export default function DriverKmManager({ employees, hrName }) {
           <datalist id="vehicle-suggestions">
             {previousVehicles.map((v) => <option key={v} value={v} />)}
           </datalist>
+          {employeeId && !editingId && recallVehicle(employeeId) && (
+            <p className="text-[10px] text-brand-600 mt-1">↺ Auto-filled from this driver's last trip — edit if a different vehicle was used.</p>
+          )}
         </div>
 
         <div className="grid grid-cols-2 gap-2.5">
@@ -177,7 +250,7 @@ export default function DriverKmManager({ employees, hrName }) {
         />
 
         <button onClick={submit} disabled={submitting} className="w-full btn-primary py-3 text-sm">
-          {submitting ? 'Saving…' : '+ Log Trip'}
+          {submitting ? 'Saving…' : editingId ? '✓ Update Trip' : '+ Log Trip'}
         </button>
       </div>
 
@@ -206,7 +279,7 @@ export default function DriverKmManager({ employees, hrName }) {
       <div className="bg-white border border-brand-50 rounded-2xl p-4 shadow-card space-y-3">
         <p className="font-display font-semibold text-ink text-sm">Trip Log</p>
         <EmployeePicker
-          employees={[{ employeeId: '', name: 'All drivers' }, ...employees]}
+          employees={[{ employeeId: '', name: 'All drivers' }, ...drivers]}
           marked={{}}
           value={filterDriver}
           onChange={setFilterDriver}
@@ -230,13 +303,14 @@ export default function DriverKmManager({ employees, hrName }) {
           <p className="text-slate-400 text-sm text-center py-8">No trips logged yet.</p>
         )}
         {logs.map((l) => (
-          <div key={l.entryId} className="bg-white border border-brand-50 rounded-2xl p-3 shadow-card flex items-center justify-between gap-2">
+          <div key={l.entryId} className={`bg-white border rounded-2xl p-3 shadow-card flex items-center justify-between gap-2 ${editingId === l.entryId ? 'border-brand-300 ring-2 ring-brand-100' : 'border-brand-50'}`}>
             <div className="min-w-0">
               <p className="font-medium text-sm text-ink truncate">{l.name} <span className="text-slate-400 font-normal">· {l.vehicle || 'no vehicle'}</span></p>
               <p className="text-[11px] text-slate-400">{l.date} · {l.startKm} → {l.endKm} km{l.notes ? ' · ' + l.notes : ''}</p>
             </div>
-            <div className="flex items-center gap-2 shrink-0">
-              <p className="font-display font-bold text-brand-600 text-sm">{l.tripKm} km</p>
+            <div className="flex items-center gap-1.5 shrink-0">
+              <p className="font-display font-bold text-brand-600 text-sm mr-1">{l.tripKm} km</p>
+              <button onClick={() => startEdit(l)} className="text-slate-400 hover:text-brand-600 text-xs font-semibold px-1.5">Edit</button>
               <button onClick={() => remove(l.entryId)} className="text-slate-300 hover:text-rust text-lg leading-none px-1">×</button>
             </div>
           </div>
