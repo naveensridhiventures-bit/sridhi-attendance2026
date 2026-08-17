@@ -113,7 +113,8 @@ export default function MarkPermissionByDate({ employees }) {
           type: 'permission',
           fromDate: date,
           toDate: '',
-          reason: `${reason} - ${hours}`
+          reason,
+          hours
         })
         // HR is marking this directly (not an employee request pending
         // review), so auto-approve it right away — mirrors how

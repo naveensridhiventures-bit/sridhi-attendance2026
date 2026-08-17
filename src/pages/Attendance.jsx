@@ -139,7 +139,8 @@ export default function Attendance() {
         type: 'permission',
         fromDate: permDate,
         toDate: '',
-        reason: `${permReason} - ${permHours}`
+        reason: permReason,
+        hours: permHours
       })
       const dateLabel = permDate === todayISO() ? 'today' : permDate
       setToast({ ok: true, message: `Permission recorded for ${emp?.name} (${dateLabel})` })
