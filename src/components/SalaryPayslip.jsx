@@ -18,6 +18,13 @@ function inr(n) {
   return '₹' + (parseFloat(n) || 0).toLocaleString('en-IN')
 }
 
+function formatDate(dateStr) {
+  if (!dateStr) return ''
+  const d = new Date(dateStr)
+  if (isNaN(d.getTime())) return dateStr
+  return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
+}
+
 /**
  * Payslip-style breakdown:
  *   Earned Salary            ₹12,000
@@ -51,16 +58,24 @@ export default function SalaryPayslip({ earnedSalary = 0, deductions = [], final
 
         {/* Each deduction line, subtracted one by one */}
         {deductions.map((d) => (
-          <div key={d.entryId || `${d.category}-${d.date}-${d.amount}`} className="flex items-center justify-between py-1.5 px-1 border-t border-dashed border-brand-50">
-            <span className="text-sm text-slate-600 flex items-center gap-1.5 min-w-0">
-              <span className="text-base shrink-0">{categoryIcon(d.category)}</span>
-              <span className="truncate">
-                <span className="text-rust font-semibold">− </span>
-                {d.category}
-                {d.note ? <span className="text-slate-400 font-normal"> · {d.note}</span> : null}
+          <div key={d.entryId || `${d.category}-${d.date}-${d.amount}`} className="py-1.5 px-1 border-t border-dashed border-brand-50">
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-slate-600 flex items-center gap-1.5 min-w-0">
+                <span className="text-base shrink-0">{categoryIcon(d.category)}</span>
+                <span className="truncate">
+                  <span className="text-rust font-semibold">− </span>
+                  {d.category}
+                </span>
               </span>
-            </span>
-            <span className="font-semibold text-rust text-sm shrink-0 ml-2">− {inr(d.amount)}</span>
+              <span className="font-semibold text-rust text-sm shrink-0 ml-2">− {inr(d.amount)}</span>
+            </div>
+            {(d.date || d.note) && (
+              <p className="text-[10px] text-slate-400 pl-6 mt-0.5 truncate">
+                {d.date && <span className="inline-flex items-center gap-0.5">📅 {formatDate(d.date)}</span>}
+                {d.date && d.note ? ' · ' : ''}
+                {d.note}
+              </p>
+            )}
           </div>
         ))}
 
