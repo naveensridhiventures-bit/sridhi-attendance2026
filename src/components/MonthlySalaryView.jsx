@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react'
-import { getMonthlySalary, getMonthlyTabsList } from '../api/sheetApi.js'
+import { getMonthlySalary, getMonthlyTabsList, getDeductionsForEmployee } from '../api/sheetApi.js'
 import { downloadExcel, downloadPdf } from '../utils/reportExport.js'
+import SalaryPayslip from './SalaryPayslip.jsx'
 
 const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
 
@@ -12,6 +13,9 @@ export default function MonthlySalaryView() {
   const [loading, setLoading] = useState(false)
   const [availableMonths, setAvailableMonths] = useState([])
   const [search, setSearch] = useState('')
+  const [expandedId, setExpandedId] = useState(null)
+  const [breakdowns, setBreakdowns] = useState({}) // employeeId -> entries[]
+  const [breakdownLoading, setBreakdownLoading] = useState(null)
 
   useEffect(() => {
     getMonthlyTabsList().then(r => setAvailableMonths(r.months || [])).catch(() => {})
@@ -21,11 +25,29 @@ export default function MonthlySalaryView() {
 
   async function load() {
     setLoading(true)
+    setExpandedId(null)
+    setBreakdowns({})
     try {
       const res = await getMonthlySalary(year, month)
       setRows(res.rows || [])
     } catch (_) { setRows([]) }
     finally { setLoading(false) }
+  }
+
+  async function toggleBreakdown(employeeId) {
+    if (expandedId === employeeId) { setExpandedId(null); return }
+    setExpandedId(employeeId)
+    if (!breakdowns[employeeId]) {
+      setBreakdownLoading(employeeId)
+      try {
+        const res = await getDeductionsForEmployee(employeeId, year, month)
+        setBreakdowns((b) => ({ ...b, [employeeId]: res.entries || [] }))
+      } catch (_) {
+        setBreakdowns((b) => ({ ...b, [employeeId]: [] }))
+      } finally {
+        setBreakdownLoading(null)
+      }
+    }
   }
 
   const label = MONTHS[month - 1] + '-' + year
@@ -182,44 +204,69 @@ export default function MonthlySalaryView() {
       )}
 
       <div className="space-y-2">
-        {filtered.map((r, i) => (
+        {filtered.map((r, i) => {
+          const isOpen = expandedId === r.EmployeeID
+          return (
           <div key={i} className="bg-white border border-brand-50 rounded-2xl p-3.5 shadow-card animate-fadeUp" style={{ animationDelay: `${i*25}ms` }}>
-            <div className="flex items-start justify-between mb-2">
-              <div>
-                <p className="font-medium text-sm text-ink flex items-center gap-1.5">
-                  {r.Name}
-                  {r.Warning === 'EXCESS ABSENT' && (
-                    <span className="text-[9px] font-semibold text-rust bg-rust/10 px-1.5 py-0.5 rounded-full">⚠ Excess Absent</span>
-                  )}
-                </p>
-                <p className="text-[11px] text-slate-400">{r.EmployeeID} · <span className="capitalize">{r.Type}</span></p>
-              </div>
-              <div className="text-right">
-                <p className="font-display font-bold text-brand-600 text-base">₹{parseFloat(r.FinalSalary||0).toLocaleString('en-IN')}</p>
-                <p className="text-[10px] text-slate-400">Final salary</p>
-              </div>
-            </div>
-            <div className="grid grid-cols-5 gap-1 text-center">
-              {[
-                { label:'Present', value:r.Present, color:'text-brand-600' },
-                { label:'Absent',  value:r.Absent,  color:'text-rust' },
-                { label:'WO',      value:r.WeekOff, color:'text-gold-500' },
-                { label:'WOP',     value:r.WOP,     color:'text-sky-500' },
-                { label:'NA',      value:r.NA,      color:'text-slate-400' }
-              ].map(s => (
-                <div key={s.label} className="bg-surface rounded-xl py-1.5">
-                  <p className={`font-bold text-sm ${s.color}`}>{s.value || 0}</p>
-                  <p className="text-[9px] text-slate-400">{s.label}</p>
+            <button
+              type="button"
+              onClick={() => r.EmployeeID && toggleBreakdown(r.EmployeeID)}
+              className="w-full text-left"
+            >
+              <div className="flex items-start justify-between mb-2">
+                <div>
+                  <p className="font-medium text-sm text-ink flex items-center gap-1.5">
+                    {r.Name}
+                    {r.Warning === 'EXCESS ABSENT' && (
+                      <span className="text-[9px] font-semibold text-rust bg-rust/10 px-1.5 py-0.5 rounded-full">⚠ Excess Absent</span>
+                    )}
+                  </p>
+                  <p className="text-[11px] text-slate-400">{r.EmployeeID} · <span className="capitalize">{r.Type}</span></p>
                 </div>
-              ))}
-            </div>
-            <div className="flex justify-between text-[10px] text-slate-400 mt-2 px-1">
-              <span>Base: ₹{parseFloat(r.MonthlySalary||0).toLocaleString('en-IN')}</span>
-              <span>Earned: ₹{parseFloat(r.EarnedSalary||0).toLocaleString('en-IN')}</span>
-              <span className="text-rust">Deduction: ₹{parseFloat(r.Deduction||0).toLocaleString('en-IN')}</span>
-            </div>
+                <div className="text-right">
+                  <p className="font-display font-bold text-brand-600 text-base">₹{parseFloat(r.FinalSalary||0).toLocaleString('en-IN')}</p>
+                  <p className="text-[10px] text-slate-400 flex items-center justify-end gap-0.5">
+                    Final salary <span className={`inline-block transition-transform ${isOpen ? 'rotate-180' : ''}`}>▾</span>
+                  </p>
+                </div>
+              </div>
+              <div className="grid grid-cols-5 gap-1 text-center">
+                {[
+                  { label:'Present', value:r.Present, color:'text-brand-600' },
+                  { label:'Absent',  value:r.Absent,  color:'text-rust' },
+                  { label:'WO',      value:r.WeekOff, color:'text-gold-500' },
+                  { label:'WOP',     value:r.WOP,     color:'text-sky-500' },
+                  { label:'NA',      value:r.NA,      color:'text-slate-400' }
+                ].map(s => (
+                  <div key={s.label} className="bg-surface rounded-xl py-1.5">
+                    <p className={`font-bold text-sm ${s.color}`}>{s.value || 0}</p>
+                    <p className="text-[9px] text-slate-400">{s.label}</p>
+                  </div>
+                ))}
+              </div>
+              <div className="flex justify-between text-[10px] text-slate-400 mt-2 px-1">
+                <span>Base: ₹{parseFloat(r.MonthlySalary||0).toLocaleString('en-IN')}</span>
+                <span>Earned: ₹{parseFloat(r.EarnedSalary||0).toLocaleString('en-IN')}</span>
+                <span className="text-rust">Deduction: ₹{parseFloat(r.Deduction||0).toLocaleString('en-IN')}</span>
+              </div>
+            </button>
+
+            {isOpen && (
+              <div className="mt-3 pt-1 animate-fadeUp">
+                {breakdownLoading === r.EmployeeID ? (
+                  <div className="h-24 rounded-2xl skeleton" />
+                ) : (
+                  <SalaryPayslip
+                    earnedSalary={parseFloat(r.EarnedSalary || 0)}
+                    deductions={breakdowns[r.EmployeeID] || []}
+                    finalSalary={parseFloat(r.FinalSalary || 0)}
+                    compact
+                  />
+                )}
+              </div>
+            )}
           </div>
-        ))}
+        )})}
       </div>
     </div>
   )

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import { addDeduction, deleteDeduction, getAllDeductionsForMonth } from '../api/sheetApi.js'
+import { addDeduction, deleteDeduction, updateDeduction, getAllDeductionsForMonth } from '../api/sheetApi.js'
 import { useToast } from './Toast.jsx'
 import EmployeePicker from './EmployeePicker.jsx'
 import { downloadExcel, downloadPdf } from '../utils/reportExport.js'
@@ -14,6 +14,10 @@ const CATEGORIES = [
   { key: 'Rice Cost',     icon: '🍚' },
   { key: 'Other',         icon: '📝' }
 ]
+
+function categoryIconFor(cat) {
+  return (CATEGORIES.find((c) => c.key === cat) || {}).icon || '📝'
+}
 
 function todayStr() {
   const d = new Date()
@@ -35,6 +39,16 @@ export default function DeductionsManager({ employees, hrName }) {
   const [note, setNote] = useState('')
   const [amount, setAmount] = useState('')
   const [submitting, setSubmitting] = useState(false)
+
+  // Inline edit state — which entry is being edited + its draft fields
+  const [editId, setEditId] = useState(null)
+  const [editDate, setEditDate] = useState('')
+  const [editCategory, setEditCategory] = useState('')
+  const [editCustomCategory, setEditCustomCategory] = useState('')
+  const [editNote, setEditNote] = useState('')
+  const [editAmount, setEditAmount] = useState('')
+  const [savingEdit, setSavingEdit] = useState(false)
+  const [confirmDeleteId, setConfirmDeleteId] = useState(null)
 
   useEffect(() => { load() }, [year, month])
 
@@ -80,9 +94,45 @@ export default function DeductionsManager({ employees, hrName }) {
     try {
       await deleteDeduction(entryId)
       setEntries((list) => list.filter((e) => e.entryId !== entryId))
+      setConfirmDeleteId(null)
       showToast('Entry removed', 'info')
     } catch (e) {
       showToast('Failed: ' + e.message, 'error')
+    }
+  }
+
+  function startEdit(entry) {
+    setEditId(entry.entryId)
+    setEditDate(entry.date)
+    const known = CATEGORIES.some((c) => c.key === entry.category)
+    setEditCategory(known ? entry.category : 'Other')
+    setEditCustomCategory(known ? '' : entry.category)
+    setEditNote(entry.note || '')
+    setEditAmount(String(entry.amount))
+    setConfirmDeleteId(null)
+  }
+
+  function cancelEdit() {
+    setEditId(null)
+  }
+
+  async function saveEdit(entryId) {
+    if (!(parseFloat(editAmount) > 0)) { showToast('Enter an amount greater than 0.', 'error'); return }
+    const finalCategory = editCategory === 'Other' ? (editCustomCategory.trim() || 'Other') : editCategory
+    setSavingEdit(true)
+    try {
+      await updateDeduction(entryId, {
+        date: editDate, category: finalCategory, note: editNote, amount: parseFloat(editAmount)
+      })
+      setEntries((list) => list.map((e) => e.entryId === entryId
+        ? { ...e, date: editDate, category: finalCategory, note: editNote, amount: parseFloat(editAmount) }
+        : e))
+      setEditId(null)
+      showToast('Entry updated', 'success')
+    } catch (e) {
+      showToast('Failed: ' + e.message, 'error')
+    } finally {
+      setSavingEdit(false)
     }
   }
 
@@ -206,15 +256,83 @@ export default function DeductionsManager({ employees, hrName }) {
           <p className="text-slate-400 text-sm text-center py-8">No deductions recorded for {label} yet.</p>
         )}
         {entries.map((e) => (
-          <div key={e.entryId} className="bg-white border border-brand-50 rounded-2xl p-3 shadow-card flex items-center justify-between gap-2">
-            <div className="min-w-0">
-              <p className="font-medium text-sm text-ink truncate">{e.name}</p>
-              <p className="text-[11px] text-slate-400">{e.date} · {e.category}{e.note ? ' · ' + e.note : ''}</p>
-            </div>
-            <div className="flex items-center gap-2 shrink-0">
-              <p className="font-display font-bold text-rust text-sm">₹{e.amount.toLocaleString('en-IN')}</p>
-              <button onClick={() => remove(e.entryId)} className="text-slate-300 hover:text-rust text-lg leading-none px-1">×</button>
-            </div>
+          <div key={e.entryId} className="bg-white border border-brand-50 rounded-2xl p-3 shadow-card">
+            {editId === e.entryId ? (
+              <div className="space-y-2.5">
+                <p className="font-semibold text-xs text-ink">Editing — {e.name}</p>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="block text-[10px] text-slate-500 mb-1 font-semibold uppercase tracking-wide">Date</label>
+                    <input type="date" value={editDate} onChange={(ev) => setEditDate(ev.target.value)} className="input text-sm" />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] text-slate-500 mb-1 font-semibold uppercase tracking-wide">Amount (₹)</label>
+                    <input type="number" min="0" value={editAmount} onChange={(ev) => setEditAmount(ev.target.value)} className="input text-sm" />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-[10px] text-slate-500 mb-1 font-semibold uppercase tracking-wide">Category</label>
+                  <div className="grid grid-cols-3 gap-1.5">
+                    {CATEGORIES.map((c) => (
+                      <button
+                        key={c.key}
+                        onClick={() => setEditCategory(c.key)}
+                        className={`flex flex-col items-center gap-0.5 py-1.5 rounded-xl text-[10px] font-semibold border transition-all ${
+                          editCategory === c.key ? 'bg-brand-500 text-white border-brand-500 shadow-soft' : 'bg-surface text-slate-500 border-brand-100'
+                        }`}
+                      >
+                        <span className="text-sm">{c.icon}</span>
+                        {c.key}
+                      </button>
+                    ))}
+                  </div>
+                  {editCategory === 'Other' && (
+                    <input
+                      type="text"
+                      value={editCustomCategory}
+                      onChange={(ev) => setEditCustomCategory(ev.target.value)}
+                      placeholder="Name this deduction…"
+                      className="input mt-2 text-sm"
+                    />
+                  )}
+                </div>
+                <input
+                  type="text"
+                  value={editNote}
+                  onChange={(ev) => setEditNote(ev.target.value)}
+                  placeholder="Note (optional) — e.g. reason or details"
+                  className="input text-sm"
+                />
+                <div className="flex gap-2">
+                  <button onClick={() => saveEdit(e.entryId)} disabled={savingEdit} className="flex-1 btn-primary py-2 text-xs">
+                    {savingEdit ? 'Saving…' : '✓ Save Changes'}
+                  </button>
+                  <button onClick={cancelEdit} disabled={savingEdit} className="px-4 py-2 rounded-xl text-xs font-semibold bg-surface text-slate-500 border border-brand-100">
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            ) : confirmDeleteId === e.entryId ? (
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-xs text-ink">Remove <span className="font-semibold">₹{e.amount.toLocaleString('en-IN')} {e.category}</span> for {e.name}?</p>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <button onClick={() => remove(e.entryId)} className="text-[11px] font-semibold px-2.5 py-1.5 rounded-lg bg-rust text-white">Delete</button>
+                  <button onClick={() => setConfirmDeleteId(null)} className="text-[11px] font-semibold px-2.5 py-1.5 rounded-lg bg-surface text-slate-500 border border-brand-100">Cancel</button>
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-center justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="font-medium text-sm text-ink truncate">{e.name}</p>
+                  <p className="text-[11px] text-slate-400">{e.date} · {categoryIconFor(e.category)} {e.category}{e.note ? ' · ' + e.note : ''}</p>
+                </div>
+                <div className="flex items-center gap-1 shrink-0">
+                  <p className="font-display font-bold text-rust text-sm mr-1">₹{e.amount.toLocaleString('en-IN')}</p>
+                  <button onClick={() => startEdit(e)} className="text-slate-300 hover:text-brand-600 text-sm leading-none px-1.5 py-1" title="Edit">✎</button>
+                  <button onClick={() => setConfirmDeleteId(e.entryId)} className="text-slate-300 hover:text-rust text-lg leading-none px-1.5 py-1" title="Delete">×</button>
+                </div>
+              </div>
+            )}
           </div>
         ))}
       </div>

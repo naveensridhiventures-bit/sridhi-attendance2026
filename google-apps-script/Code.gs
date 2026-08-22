@@ -43,7 +43,7 @@ const LIGHTWEIGHT_ACTIONS = new Set([
   'getHeroImage', 'setHeroImage',
   'dashboardLogin', 'hrLogin',
   'getHrWhatsappNumber', 'setHrWhatsappNumber',
-  'addDeduction', 'getDeductionsForEmployee', 'getAllDeductionsForMonth', 'deleteDeduction',
+  'addDeduction', 'getDeductionsForEmployee', 'getAllDeductionsForMonth', 'deleteDeduction', 'updateDeduction',
   'addDriverKm', 'getDriverKmLogs', 'getDriverKmSummary', 'deleteDriverKmEntry', 'updateDriverKmEntry'
 ])
 
@@ -124,6 +124,7 @@ function route_(body) {
   if (a === 'getDeductionsForEmployee') return getDeductionsForEmployee(body.employeeId, body.year, body.month)
   if (a === 'getAllDeductionsForMonth') return getAllDeductionsForMonth(body.year, body.month)
   if (a === 'deleteDeduction')       return deleteDeduction(body.entryId)
+  if (a === 'updateDeduction')       return updateDeduction(body.entryId, body.updates)
   if (a === 'addDriverKm')           return addDriverKm(body.entry)
   if (a === 'getDriverKmLogs')       return getDriverKmLogs(body.employeeId, body.fromDate, body.toDate)
   if (a === 'getDriverKmSummary')    return getDriverKmSummary()
@@ -443,6 +444,29 @@ function deleteDeduction(entryId) {
   for (let i = 1; i < vals.length; i++) {
     if (String(vals[i][0]) === String(entryId)) {
       sh.deleteRow(i + 1)
+      return { success: true }
+    }
+  }
+  return { success: false, message: 'Entry not found' }
+}
+
+// Edits an existing ledger row in place (date / category / note / amount).
+// EmployeeID + Employee Name are kept as originally recorded — if the entry
+// needs to move to a different employee, delete it and add a fresh one.
+function updateDeduction(entryId, updates) {
+  if (!entryId || !updates) return { success: false, message: 'Entry ID and updates are required' }
+  if (!updates.date || !updates.category || !(parseFloat(updates.amount) > 0)) {
+    return { success: false, message: 'Date, category and a positive amount are required' }
+  }
+  const sh = getSS().getSheetByName('Deductions')
+  if (!sh) return { success: false, message: 'No deductions recorded yet' }
+  const vals = sh.getDataRange().getValues()
+  for (let i = 1; i < vals.length; i++) {
+    if (String(vals[i][0]) === String(entryId)) {
+      // Columns: Date(4) Category(5) Note(6) Amount(7)
+      sh.getRange(i + 1, 4, 1, 4).setValues([[
+        updates.date, updates.category, updates.note || '', parseFloat(updates.amount) || 0
+      ]])
       return { success: true }
     }
   }

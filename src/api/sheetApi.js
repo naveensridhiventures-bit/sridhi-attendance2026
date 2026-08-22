@@ -110,6 +110,7 @@ export const addDeduction              = (entry)                          => cal
 export const getDeductionsForEmployee  = (employeeId, year, month)        => callApi('getDeductionsForEmployee', { employeeId, year, month })
 export const getAllDeductionsForMonth  = (year, month)                    => callApi('getAllDeductionsForMonth', { year, month })
 export const deleteDeduction           = (entryId)                        => callApi('deleteDeduction', { entryId })
+export const updateDeduction           = (entryId, updates)               => callApi('updateDeduction', { entryId, updates })
 
 // ---------- Driver KM ----------
 export const addDriverKm         = (entry)                                => callApi('addDriverKm', { entry })

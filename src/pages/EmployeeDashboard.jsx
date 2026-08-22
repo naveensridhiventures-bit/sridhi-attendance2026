@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getMonthlyAttendance, applyLeave, getLeaveRequests, getEmployeeSalary, getDeductionsForEmployee, getPermissionsForEmployeeMonth } from '../api/sheetApi.js'
+import SalaryPayslip from '../components/SalaryPayslip.jsx'
 import QRCodeDisplay from '../components/QRCodeDisplay.jsx'
 
 const STATUS_STYLE = {
@@ -229,35 +230,23 @@ export default function EmployeeDashboard() {
                 </p>
               )}
             </div>
-            <div className="grid grid-cols-3 gap-1.5 text-center mb-3">
+            <div className="grid grid-cols-2 gap-1.5 text-center mb-3">
               <div className="bg-surface rounded-xl py-2">
                 <p className="font-bold text-sm text-ink">₹{parseFloat(salary.MonthlySalary || 0).toLocaleString('en-IN')}</p>
-                <p className="text-[9px] text-slate-400">Base</p>
+                <p className="text-[9px] text-slate-400">Base (Monthly)</p>
               </div>
               <div className="bg-surface rounded-xl py-2">
-                <p className="font-bold text-sm text-brand-600">₹{parseFloat(salary.EarnedSalary || 0).toLocaleString('en-IN')}</p>
-                <p className="text-[9px] text-slate-400">Earned</p>
-              </div>
-              <div className="bg-surface rounded-xl py-2">
-                <p className="font-bold text-sm text-rust">₹{parseFloat(salary.Deduction || 0).toLocaleString('en-IN')}</p>
-                <p className="text-[9px] text-slate-400">Deductions</p>
+                <p className="font-bold text-sm text-rust">− ₹{parseFloat(salary.Deduction || 0).toLocaleString('en-IN')}</p>
+                <p className="text-[9px] text-slate-400">Total Deducted</p>
               </div>
             </div>
 
-            {deductions.length > 0 && (
-              <div className="space-y-1.5">
-                <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide px-0.5">Deduction Details</p>
-                {deductions.map((d) => (
-                  <div key={d.entryId} className="flex items-center justify-between bg-rust/5 rounded-xl px-3 py-2">
-                    <div className="min-w-0">
-                      <p className="text-xs font-medium text-ink truncate">{d.category}</p>
-                      <p className="text-[10px] text-slate-400">{d.date}{d.note ? ' · ' + d.note : ''}</p>
-                    </div>
-                    <p className="text-xs font-bold text-rust shrink-0">₹{d.amount.toLocaleString('en-IN')}</p>
-                  </div>
-                ))}
-              </div>
-            )}
+            {/* Itemized breakdown — exactly how the Net Salary was arrived at */}
+            <SalaryPayslip
+              earnedSalary={parseFloat(salary.EarnedSalary || 0)}
+              deductions={deductions}
+              finalSalary={parseFloat(salary.FinalSalary || 0)}
+            />
           </>
         )}
       </div>
