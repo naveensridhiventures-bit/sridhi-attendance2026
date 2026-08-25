@@ -43,6 +43,7 @@ const LIGHTWEIGHT_ACTIONS = new Set([
   'getHeroImage', 'setHeroImage',
   'dashboardLogin', 'hrLogin',
   'getHrWhatsappNumber', 'setHrWhatsappNumber',
+  'verifyAttendancePassword', 'setAttendancePassword',
   'addDeduction', 'getDeductionsForEmployee', 'getAllDeductionsForMonth', 'deleteDeduction', 'updateDeduction',
   'addDriverKm', 'getDriverKmLogs', 'getDriverKmSummary', 'deleteDriverKmEntry', 'updateDriverKmEntry'
 ])
@@ -120,6 +121,8 @@ function route_(body) {
   if (a === 'getAbsenteesToday')     return getAbsenteesToday()
   if (a === 'getHrWhatsappNumber')   return getHrWhatsappNumber()
   if (a === 'setHrWhatsappNumber')   return setHrWhatsappNumber(body.number)
+  if (a === 'verifyAttendancePassword') return verifyAttendancePassword(body.password)
+  if (a === 'setAttendancePassword') return setAttendancePassword(body.password)
   if (a === 'addDeduction')          return addDeduction(body.entry)
   if (a === 'getDeductionsForEmployee') return getDeductionsForEmployee(body.employeeId, body.year, body.month)
   if (a === 'getAllDeductionsForMonth') return getAllDeductionsForMonth(body.year, body.month)
@@ -1220,6 +1223,25 @@ function getHrWhatsappNumber() {
 
 function setHrWhatsappNumber(number) {
   settingsSet('hrWhatsappNumber', number || '', '')
+  return { success: true }
+}
+
+// ─── Attendance password (gate on the Attendance page) ─────────────────────
+// Stored in the Settings sheet under key 'attendancePassword'. Falls back to
+// '1234' until HR sets a real one from the HR Dashboard so the app never
+// locks everyone out before a password has been configured.
+const DEFAULT_ATTENDANCE_PASSWORD = '1234'
+
+function verifyAttendancePassword(password) {
+  const row = settingsGet('attendancePassword')
+  const stored = row && row.value ? String(row.value) : DEFAULT_ATTENDANCE_PASSWORD
+  return { success: true, valid: String(password || '') === stored }
+}
+
+function setAttendancePassword(password) {
+  const pw = String(password || '').trim()
+  if (!pw) return { success: false, message: 'Password cannot be empty' }
+  settingsSet('attendancePassword', pw, '')
   return { success: true }
 }
 

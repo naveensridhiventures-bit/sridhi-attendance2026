@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import QRScanner from '../components/QRScanner.jsx'
-import { getEmployees, markAttendance, applyLeave } from '../api/sheetApi.js'
+import { getEmployees, markAttendance, applyLeave, verifyAttendancePassword } from '../api/sheetApi.js'
 import PersonAvatar from '../components/PersonAvatar.jsx'
 import EnergyParticles from '../components/EnergyParticles.jsx'
 import Confetti from '../components/Confetti.jsx'
@@ -21,6 +21,14 @@ function todayISO() {
 
 export default function Attendance() {
   const showToast = useToast()
+
+  // password gate — asked fresh every time this page is opened, so
+  // marking attendance always requires the current admin-set password
+  const [unlocked, setUnlocked] = useState(false)
+  const [pwInput, setPwInput] = useState('')
+  const [pwError, setPwError] = useState('')
+  const [verifying, setVerifying] = useState(false)
+
   const [confettiTrigger, setConfettiTrigger] = useState(0)
   const [mode, setMode] = useState('mark')
   const [heroImage, setHeroImage] = useState(null) // { imageUrl, caption }
@@ -49,11 +57,35 @@ export default function Attendance() {
   const [qrResult, setQrResult] = useState(null)
 
   useEffect(() => {
+    if (!unlocked) return
     load()
     getHeroImage()
       .then((d) => { if (d.heroImage?.imageUrl) setHeroImage(d.heroImage) })
       .catch(() => {})
-  }, [])
+  }, [unlocked])
+
+  async function handleUnlock() {
+    if (!pwInput) {
+      setPwError('Enter the attendance password')
+      return
+    }
+    setVerifying(true)
+    setPwError('')
+    try {
+      const res = await verifyAttendancePassword(pwInput)
+      if (res.valid) {
+        setUnlocked(true)
+        setPwInput('')
+      } else {
+        setPwError('Incorrect password. Try again.')
+        haptics.error()
+      }
+    } catch (e) {
+      setPwError(e.message || 'Could not verify password right now')
+    } finally {
+      setVerifying(false)
+    }
+  }
 
   async function load() {
     setLoading(true)
@@ -171,6 +203,33 @@ export default function Attendance() {
     } finally {
       setTimeout(() => setQrPaused(false), 1600)
     }
+  }
+
+  if (!unlocked) {
+    return (
+      <div className="min-h-[75vh] flex items-center justify-center px-6">
+        <div className="w-full max-w-xs bg-white rounded-3xl p-6 shadow-card border border-brand-50 animate-popIn text-center">
+          <div className="w-14 h-14 rounded-2xl bg-brand-500 text-white flex items-center justify-center text-2xl mx-auto mb-4">
+            🔒
+          </div>
+          <h2 className="font-display text-lg font-bold text-ink mb-1">Attendance Locked</h2>
+          <p className="text-xs text-slate-400 mb-5">Enter the attendance password to view or mark attendance.</p>
+          <input
+            type="password"
+            value={pwInput}
+            onChange={(e) => { setPwInput(e.target.value); setPwError('') }}
+            onKeyDown={(e) => { if (e.key === 'Enter') handleUnlock() }}
+            placeholder="Password"
+            className="input text-center mb-2"
+            autoFocus
+          />
+          {pwError && <p className="text-xs text-rust mb-2">{pwError}</p>}
+          <button onClick={handleUnlock} disabled={verifying} className="w-full btn-primary py-3 mt-2">
+            {verifying ? 'Checking…' : 'Unlock'}
+          </button>
+        </div>
+      </div>
+    )
   }
 
   return (

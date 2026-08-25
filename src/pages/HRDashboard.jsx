@@ -12,6 +12,7 @@ import DeductionsManager from '../components/DeductionsManager.jsx'
 import DriverKmManager from '../components/DriverKmManager.jsx'
 import PermissionsManager from '../components/PermissionsManager.jsx'
 import MarkPermissionByDate from '../components/MarkPermissionByDate.jsx'
+import AttendancePasswordManager from '../components/AttendancePasswordManager.jsx'
 
 export default function HRDashboard() {
   const showToast = useToast()
@@ -118,7 +119,8 @@ export default function HRDashboard() {
           { key: 'logs',     label: 'Logs',     icon: '🕒' },
           { key: 'hero',     label: 'Hero',     icon: '🖼' },
           { key: 'msg',      label: 'Message',  icon: '📣' },
-          { key: 'absent',   label: 'Absent',   icon: '📲' }
+          { key: 'absent',   label: 'Absent',   icon: '📲' },
+          { key: 'attpwd',   label: 'Att. Pwd', icon: '🔒' }
         ].map((t) => (
           <button
             key={t.key}
@@ -281,6 +283,12 @@ export default function HRDashboard() {
       {tab === 'absent' && (
         <div className="animate-popIn">
           <AbsenteeWhatsApp />
+        </div>
+      )}
+
+      {tab === 'attpwd' && (
+        <div className="animate-popIn">
+          <AttendancePasswordManager />
         </div>
       )}
     </div>

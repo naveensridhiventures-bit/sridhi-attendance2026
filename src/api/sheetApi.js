@@ -75,6 +75,10 @@ export const getMonthlyAttendance = (employeeId, year, month)    => callApi('get
 // ---------- Dashboard auth ----------
 export const dashboardLogin       = (employeeId, password)       => callApi('dashboardLogin', { employeeId, password })
 
+// ---------- Attendance password gate (admin-changeable) ----------
+export const verifyAttendancePassword = (password)               => callApi('verifyAttendancePassword', { password })
+export const setAttendancePassword    = (password)                => callApi('setAttendancePassword', { password })
+
 // ---------- Leave & Permission ----------
 export const applyLeave           = (request)                    => callApi('applyLeave', { request })
 export const getLeaveRequests     = (employeeId)                 => callApi('getLeaveRequests', { employeeId })
