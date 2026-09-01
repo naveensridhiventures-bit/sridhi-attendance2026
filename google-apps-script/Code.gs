@@ -274,8 +274,10 @@ function daysInMonth(year, month) {
 }
 
 function workingDaysInMonth(year, month) {
-  // Fixed 30 days for salary calculation (company policy)
-  return 30
+  // Use the real number of calendar days in the month (28/29/30/31) so
+  // Per Day Salary = Monthly Salary / actual days — a 31-day month like
+  // August or January should divide by 31, not a fixed 30.
+  return daysInMonth(year, month)
 }
 
 // ─── Tab naming ───────────────────────────────────────────────────────────────
@@ -1782,6 +1784,31 @@ function recalcNow() {
   const ym = currentYM()
   syncSalarySheet_(ym.year, ym.month)
   Logger.log('✅ Salary recalculated for ' + ym.month + '/' + ym.year)
+}
+
+// Run this ONCE after deploying the fix that makes workingDaysInMonth()
+// use the real calendar days (28/29/30/31) instead of a fixed 30. It walks
+// every existing "<Month>-<Year> Salary" tab in the spreadsheet and re-runs
+// syncSalarySheet_() on it, so Total Days / Per Day Salary / Gross / Net on
+// already-created months (e.g. August-2026, which has 31 days) get fixed
+// immediately instead of waiting for the next attendance mark in that month.
+function recalcAllMonthsFor31DayFix() {
+  const ss = getSS()
+  const sheets = ss.getSheets()
+  let fixed = 0
+  sheets.forEach(sh => {
+    const name = sh.getName()
+    const match = name.match(/^([A-Za-z]+)-(\d{4}) Salary$/)
+    if (!match) return
+    const monthIdx = FULL_MONTHS.indexOf(match[1])
+    if (monthIdx === -1) return
+    const year = parseInt(match[2], 10)
+    const month = monthIdx + 1
+    syncSalarySheet_(year, month)
+    Logger.log('✅ Recalculated ' + name)
+    fixed++
+  })
+  Logger.log('Done — recalculated ' + fixed + ' salary tab(s).')
 }
 
 // Run this ONCE after deploying this version, to create the Logs tab immediately
