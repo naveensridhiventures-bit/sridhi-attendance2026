@@ -2,16 +2,20 @@ import React from 'react'
 
 // Icon + accent per deduction category — keep in sync with DeductionsManager's CATEGORIES.
 const CATEGORY_META = {
-  'Advance':      { icon: '💵' },
-  'Penalty':      { icon: '⚠️' },
-  'Gas Expense':  { icon: '🔥' },
-  'Food Expense': { icon: '🍽️' },
-  'Rice Cost':    { icon: '🍚' },
-  'Other':        { icon: '📝' }
+  'Advance':      { icon: '💵', dot: 'bg-amber-500' },
+  'Penalty':      { icon: '⚠️', dot: 'bg-red-500' },
+  'Gas Expense':  { icon: '🔥', dot: 'bg-orange-500' },
+  'Food Expense': { icon: '🍽️', dot: 'bg-emerald-500' },
+  'Rice Cost':    { icon: '🍚', dot: 'bg-yellow-600' },
+  'Other':        { icon: '📝', dot: 'bg-slate-400' }
 }
 
 function categoryIcon(cat) {
   return CATEGORY_META[cat]?.icon || '📝'
+}
+
+function categoryDot(cat) {
+  return CATEGORY_META[cat]?.dot || 'bg-slate-400'
 }
 
 function inr(n) {
@@ -61,6 +65,7 @@ export default function SalaryPayslip({ earnedSalary = 0, deductions = [], final
           <div key={d.entryId || `${d.category}-${d.date}-${d.amount}`} className="py-1.5 px-1 border-t border-dashed border-brand-50">
             <div className="flex items-center justify-between">
               <span className="text-sm text-slate-600 flex items-center gap-1.5 min-w-0">
+                <span className={`w-2 h-2 rounded-full shrink-0 ${categoryDot(d.category)}`} />
                 <span className="text-base shrink-0">{categoryIcon(d.category)}</span>
                 <span className="truncate">
                   <span className="text-rust font-semibold">− </span>

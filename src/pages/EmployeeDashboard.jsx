@@ -4,11 +4,17 @@ import { getMonthlyAttendance, applyLeave, getLeaveRequests, getEmployeeSalary, 
 import SalaryPayslip from '../components/SalaryPayslip.jsx'
 import QRCodeDisplay from '../components/QRCodeDisplay.jsx'
 
+// Matches the exact colors already used for P / A / WO / WOP / NA in the
+// Google Sheet itself (see COLORS in Code.gs), so a day looks the same
+// whether HR is looking at the spreadsheet or the employee is looking at
+// their phone. 'wop' was previously missing here entirely, which meant a
+// WOP day rendered with NO background at all — an invisible calendar cell.
 const STATUS_STYLE = {
-  present: 'bg-brand-500 text-white',
-  weekoff: 'bg-gold-500 text-white',
-  na: 'bg-rust text-white',
-  absent: 'bg-slate-300 text-slate-600'
+  present: 'bg-emerald-500 text-white',   // sheet: P = green
+  absent:  'bg-red-500 text-white',       // sheet: A = red
+  weekoff: 'bg-yellow-400 text-ink',      // sheet: WO = yellow
+  wop:     'bg-purple-600 text-white',    // sheet: WOP = purple
+  na:      'bg-blue-600 text-white'       // sheet: NA = blue
 }
 
 const PERM_REASONS = ['Personal Work', 'Medical / Health', 'Family Emergency', 'Bank / Govt Work', 'Vehicle Issue', 'Other']
@@ -140,7 +146,7 @@ export default function EmployeeDashboard() {
   }
 
   const summary = useMemo(() => {
-    const s = { present: 0, weekoff: 0, na: 0, absent: 0 }
+    const s = { present: 0, weekoff: 0, wop: 0, na: 0, absent: 0 }
     days.forEach((d) => {
       if (d.status && s[d.status] !== undefined) s[d.status]++
     })
@@ -202,10 +208,12 @@ export default function EmployeeDashboard() {
                 </div>
               ))}
             </div>
-            <div className="flex flex-wrap gap-2 mt-3 text-[10px] text-slate-500">
-              <Legend color="bg-brand-500" label={`Present (${summary.present})`} />
-              <Legend color="bg-gold-500" label={`Week Off (${summary.weekoff})`} />
-              <Legend color="bg-rust" label={`N/A (${summary.na})`} />
+            <div className="flex flex-wrap gap-x-3 gap-y-1.5 mt-3 text-[10px] text-slate-500">
+              <Legend color="bg-emerald-500" label={`Present (${summary.present})`} />
+              <Legend color="bg-red-500" label={`Absent (${summary.absent})`} />
+              <Legend color="bg-yellow-400" label={`Week Off (${summary.weekoff})`} />
+              <Legend color="bg-purple-600" label={`WOP (${summary.wop})`} />
+              <Legend color="bg-blue-600" label={`N/A (${summary.na})`} />
             </div>
           </>
         )}
@@ -220,12 +228,17 @@ export default function EmployeeDashboard() {
           <p className="text-slate-400 text-xs text-center py-4">No salary data yet for {monthLabel}.</p>
         ) : (
           <>
-            <div className="rounded-2xl bg-gradient-to-br from-brand-600 to-brand-800 p-4 cell-pattern mb-3">
-              <p className="text-brand-100 text-xs mb-1">Net Salary</p>
-              <p className="font-display font-bold text-white text-2xl">₹{parseFloat(salary.FinalSalary || 0).toLocaleString('en-IN')}</p>
+            <div
+              className="rounded-2xl bg-gradient-to-br from-brand-600 to-brand-800 cell-pattern p-4 mb-3 shadow-soft"
+              style={{ backgroundColor: '#0F6630' }}
+            >
+              <p className="text-brand-100 text-[11px] font-semibold uppercase tracking-wide mb-1">Net Salary</p>
+              <p className="font-display font-extrabold text-white text-[28px] leading-tight">
+                ₹{parseFloat(salary.FinalSalary || 0).toLocaleString('en-IN')}
+              </p>
               {month.getFullYear() === new Date().getFullYear() && month.getMonth() === new Date().getMonth() && (
-                <p className="text-brand-200 text-[10px] mt-1 flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block"></span>
+                <p className="text-brand-100 text-[10px] mt-1.5 flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-300 inline-block animate-pulseRing"></span>
                   Live · updates as attendance is marked
                 </p>
               )}

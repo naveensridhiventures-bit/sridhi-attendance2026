@@ -232,11 +232,11 @@ export default function MonthlySalaryView() {
               </div>
               <div className="grid grid-cols-5 gap-1 text-center">
                 {[
-                  { label:'Present', value:r.Present, color:'text-brand-600' },
-                  { label:'Absent',  value:r.Absent,  color:'text-rust' },
-                  { label:'WO',      value:r.WeekOff, color:'text-gold-500' },
-                  { label:'WOP',     value:r.WOP,     color:'text-sky-500' },
-                  { label:'NA',      value:r.NA,      color:'text-slate-400' }
+                  { label:'Present', value:r.Present, color:'text-emerald-600' },
+                  { label:'Absent',  value:r.Absent,  color:'text-red-500' },
+                  { label:'WO',      value:r.WeekOff, color:'text-yellow-600' },
+                  { label:'WOP',     value:r.WOP,     color:'text-purple-600' },
+                  { label:'NA',      value:r.NA,      color:'text-blue-600' }
                 ].map(s => (
                   <div key={s.label} className="bg-surface rounded-xl py-1.5">
                     <p className={`font-bold text-sm ${s.color}`}>{s.value || 0}</p>

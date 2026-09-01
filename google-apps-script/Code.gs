@@ -509,8 +509,16 @@ function _deductionRows() {
 
 function getDeductionsForEmployee(employeeId, year, month) {
   const ym = (year && month) ? { year, month } : currentYM()
+  // Also resolve this employee's name so entries logged with a mismatched
+  // or blank EmployeeID (but the right name) still show up here — the
+  // Salary tab's Advance total is summed by name via deductionTotalsByName_,
+  // so this list has to match on name too or the two numbers disagree.
+  const empRes = getEmployeeById(employeeId)
+  const empName = empRes.success ? normName_(empRes.employee.name) : ''
   const rows = _deductionRows().filter(r => {
-    if (String(r.employeeId) !== String(employeeId)) return false
+    const matchesId = String(r.employeeId) === String(employeeId)
+    const matchesName = empName && normName_(r.name) === empName
+    if (!matchesId && !matchesName) return false
     const d = new Date(r.date)
     return d.getFullYear() === ym.year && (d.getMonth() + 1) === ym.month
   }).sort((a, b) => a.date < b.date ? 1 : -1)
