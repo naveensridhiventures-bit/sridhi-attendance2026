@@ -439,6 +439,11 @@ function addDeduction(entry) {
     id, entry.employeeId, entry.name || '', entry.date, entry.category,
     entry.note || '', parseFloat(entry.amount) || 0, entry.addedBy || '', new Date()
   ])
+  // Resync that month's Salary tab right away so Net Salary reflects the
+  // new advance/deduction immediately, instead of waiting for the next
+  // attendance mark to happen to trigger a sync.
+  const d = new Date(entry.date)
+  syncSalarySheet_(d.getFullYear(), d.getMonth() + 1)
   return { success: true, entryId: id }
 }
 
@@ -448,7 +453,10 @@ function deleteDeduction(entryId) {
   const vals = sh.getDataRange().getValues()
   for (let i = 1; i < vals.length; i++) {
     if (String(vals[i][0]) === String(entryId)) {
+      const entryDate = vals[i][3]
       sh.deleteRow(i + 1)
+      const d = new Date(entryDate)
+      syncSalarySheet_(d.getFullYear(), d.getMonth() + 1)
       return { success: true }
     }
   }
@@ -468,10 +476,19 @@ function updateDeduction(entryId, updates) {
   const vals = sh.getDataRange().getValues()
   for (let i = 1; i < vals.length; i++) {
     if (String(vals[i][0]) === String(entryId)) {
+      const oldDate = vals[i][3]
       // Columns: Date(4) Category(5) Note(6) Amount(7)
       sh.getRange(i + 1, 4, 1, 4).setValues([[
         updates.date, updates.category, updates.note || '', parseFloat(updates.amount) || 0
       ]])
+      // Resync the Salary tab right away. If the date was moved to a
+      // different month, resync both months so neither one is left stale.
+      const oldD = new Date(oldDate)
+      const newD = new Date(updates.date)
+      syncSalarySheet_(oldD.getFullYear(), oldD.getMonth() + 1)
+      if (oldD.getFullYear() !== newD.getFullYear() || oldD.getMonth() !== newD.getMonth()) {
+        syncSalarySheet_(newD.getFullYear(), newD.getMonth() + 1)
+      }
       return { success: true }
     }
   }
@@ -1421,14 +1438,12 @@ function syncSalarySheet_(year, month) {
       const monthly = (name in empSalaryByName) ? empSalaryByName[name] : (parseFloat(salVals[i][2]) || 0)
       const advance = deductionTotals[name] || 0
       const perDay = workDays > 0 ? monthly / workDays : 0
-      // WO (Week Off) is paid leave, same as a normal working day — it
-      // counts toward Paid Days alongside P (Present) and WOP (Worked on
-      // what would've been a week off). Only A (Absent) and NA are unpaid.
-      const paidDays = t.P + t.WO + t.WOP
-      // WOP means someone came in on their day off, so it's paid DOUBLE —
-      // "Paid Days" above still shows the plain day count for tracking,
-      // but the actual salary math counts each WOP day twice.
+      // WO (Week Off) is paid leave, same as a normal working day. WOP
+      // means someone came in on their day off, so it's paid DOUBLE — and
+      // now Paid Days shows that too (counts as 2), so the column always
+      // matches what's actually being paid instead of looking like 1 day.
       const payableUnits = t.P + t.WO + (t.WOP * 2)
+      const paidDays = payableUnits
       const gross = Math.round(payableUnits * perDay)
       const net = Math.max(gross - advance, 0)
       const warning = t.A > 3 ? 'EXCESS ABSENT' : 'OK'
