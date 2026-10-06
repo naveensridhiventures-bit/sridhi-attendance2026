@@ -62,8 +62,8 @@ export default function MonthlySalaryView() {
     downloadExcel(
       `Attendance-${label}`,
       `Attendance Report — ${label}`,
-      ['Employee', 'ID', 'Type', 'Present', 'Absent', 'Week Off', 'WOP', 'NA', 'Total Days', 'Paid Days'],
-      filtered.map(r => [r.Name, r.EmployeeID, r.Type, r.Present, r.Absent, r.WeekOff, r.WOP, r.NA, r.TotalDays, r.PaidDays])
+      ['Employee', 'ID', 'Type', 'Present', 'Half Day', 'Absent', 'Week Off', 'WOP', 'NA', 'Total Days', 'Paid Days'],
+      filtered.map(r => [r.Name, r.EmployeeID, r.Type, r.Present, r.Half, r.Absent, r.WeekOff, r.WOP, r.NA, r.TotalDays, r.PaidDays])
     )
   }
 
@@ -71,8 +71,8 @@ export default function MonthlySalaryView() {
     downloadPdf(
       `Attendance Report — ${label}`,
       `Sridhi Ventures · Generated ${new Date().toLocaleDateString('en-IN')}`,
-      ['Employee', 'ID', 'Present', 'Absent', 'Week Off', 'WOP', 'NA', 'Paid Days'],
-      filtered.map(r => [r.Name, r.EmployeeID, r.Present, r.Absent, r.WeekOff, r.WOP, r.NA, r.PaidDays]),
+      ['Employee', 'ID', 'Present', 'Half Day', 'Absent', 'Week Off', 'WOP', 'NA', 'Paid Days'],
+      filtered.map(r => [r.Name, r.EmployeeID, r.Present, r.Half, r.Absent, r.WeekOff, r.WOP, r.NA, r.PaidDays]),
       [
         { label: 'Employees', value: String(filtered.length) },
         { label: 'Month', value: label }
@@ -230,9 +230,10 @@ export default function MonthlySalaryView() {
                   </p>
                 </div>
               </div>
-              <div className="grid grid-cols-5 gap-1 text-center">
+              <div className="grid grid-cols-6 gap-1 text-center">
                 {[
                   { label:'Present', value:r.Present, color:'text-emerald-600' },
+                  { label:'H',       value:r.Half,    color:'text-orange-500' },
                   { label:'Absent',  value:r.Absent,  color:'text-red-500' },
                   { label:'WO',      value:r.WeekOff, color:'text-yellow-600' },
                   { label:'WOP',     value:r.WOP,     color:'text-purple-600' },

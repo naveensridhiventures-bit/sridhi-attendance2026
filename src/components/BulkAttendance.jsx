@@ -113,7 +113,7 @@ export default function BulkAttendance({ employees, marked, setMarked, location,
       {/* 1. Status to apply */}
       <div>
         <label className="block text-xs text-slate-500 mb-1.5 font-semibold uppercase tracking-wide">Apply this status</label>
-        <div className="grid grid-cols-5 gap-1.5">
+        <div className="grid grid-cols-6 gap-1.5">
           {STATUS_OPTIONS.map((opt) => (
             <button
               key={opt.key}

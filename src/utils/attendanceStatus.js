@@ -4,11 +4,15 @@
 
 export const STATUS_OPTIONS = [
   { key: 'present', label: 'P',   full: 'Present',        color: 'from-emerald-400 to-emerald-600', dot: 'bg-emerald-500', soft: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
+  { key: 'half',    label: 'H',   full: 'Half Day',        color: 'from-orange-400 to-orange-600',   dot: 'bg-orange-500',  soft: 'bg-orange-50 text-orange-700 border-orange-200' },
   { key: 'absent',  label: 'A',   full: 'Absent',          color: 'from-red-400 to-red-600',         dot: 'bg-red-500',     soft: 'bg-red-50 text-red-700 border-red-200' },
   { key: 'weekoff', label: 'WO',  full: 'Week Off',        color: 'from-yellow-300 to-yellow-500',   dot: 'bg-yellow-400',  soft: 'bg-yellow-50 text-yellow-700 border-yellow-200' },
   { key: 'wop',     label: 'WOP', full: 'Worked on WO',    color: 'from-purple-400 to-purple-600',   dot: 'bg-purple-600',  soft: 'bg-purple-50 text-purple-700 border-purple-200' },
   { key: 'na',      label: 'NA',  full: 'Not Available',   color: 'from-blue-400 to-blue-600',       dot: 'bg-blue-600',    soft: 'bg-blue-50 text-blue-700 border-blue-200' }
 ]
+
+// Sheet code for each status key (what is written into the Google Sheet cell)
+export const STATUS_SHEET_CODE = { present: 'P', half: 'H', absent: 'A', weekoff: 'WO', wop: 'WOP', na: 'NA' }
 
 const UNMARKED = { key: '', label: '', full: 'Not marked', color: 'from-slate-200 to-slate-300', dot: 'bg-slate-300', soft: 'bg-white text-slate-400 border-brand-100' }
 

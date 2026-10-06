@@ -3,6 +3,7 @@ import { getLogs } from '../api/sheetApi.js'
 
 const STATUS_STYLE = {
   P:   { bg: 'bg-green-100',  text: 'text-green-700',  label: 'Present' },
+  H:   { bg: 'bg-orange-100', text: 'text-orange-700', label: 'Half Day' },
   A:   { bg: 'bg-red-100',    text: 'text-red-700',    label: 'Absent' },
   WO:  { bg: 'bg-yellow-100', text: 'text-yellow-700',  label: 'Week Off' },
   WOP: { bg: 'bg-purple-100', text: 'text-purple-700',  label: 'Worked on WO' },

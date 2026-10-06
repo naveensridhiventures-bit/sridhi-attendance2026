@@ -4,7 +4,7 @@
  *   Attendance: SNO | Employee Name | 01-Jun-26 | 02-Jun-26 | ... (horizontal grid)
  *   Salary:     S.No | Employee Name | Monthly Salary | Advance | Total Days |
  *               P Count | A Count | WO Count | WOP Count | Paid Days |
- *               Per Day Salary | Gross Salary | Net Salary | Warning
+ *               Per Day Salary | Gross Salary | Net Salary | Warning | NA Count | H Count
  *   Logs:       S.No | Date | Time | EmployeeID | Name | Role | Type | Status |
  *               Marked By | Latitude | Longitude | Map Link | Timestamp
  *               (one permanent tab — every attendance mark ever made, newest on top)
@@ -29,7 +29,26 @@ const COLORS = {
   A:   '#FF0000',  // Red
   WO:  '#FFFF00',  // Yellow
   WOP: '#9900FF',  // Purple
+  H:   '#FFA500',  // Orange (Half Day)
   NA:  '#4169E1'   // Blue
+}
+
+// Where the 5 PM "attendance not marked" reminder is sent
+const ALERT_EMAIL = 'naveensridhiventures@gmail.com'
+const ALERT_HOUR = 17 // 5 PM (IST)
+
+// Converts whatever status the app/sheet sends into the code stored in the sheet cell.
+// P = Present, H = Half Day (0.5 paid), A = Absent, WO = Week Off,
+// WOP = Worked on Week Off (paid double), NA = Not Available
+function toDisplayStatus_(raw) {
+  const f = String(raw || 'present').toUpperCase().trim()
+  if (f === 'PRESENT' || f === 'P') return 'P'
+  if (f === 'HALF' || f === 'HALFDAY' || f === 'HALF DAY' || f === 'H') return 'H'
+  if (f === 'ABSENT' || f === 'A') return 'A'
+  if (f === 'WEEKOFF' || f === 'WO') return 'WO'
+  if (f === 'WOP') return 'WOP'
+  if (f === 'NA') return 'NA'
+  return f
 }
 
 // ─── JSONP-enabled routing ────────────────────────────────────────────────────
@@ -367,7 +386,7 @@ function createSalaryTab_(ss, year, month) {
   const sh = ss.insertSheet(salTabName(year, month))
   const headers = ['S.No','Employee Name','Monthly Salary','Advance','Total Days',
     'P Count','A Count','WO Count','WOP Count','Paid Days',
-    'Per Day Salary','Gross Salary','Net Salary','Warning','NA Count']
+    'Per Day Salary','Gross Salary','Net Salary','Warning','NA Count','H Count']
   sh.appendRow(headers)
   sh.setFrozenRows(1)
   formatHeader_(sh, headers.length)
@@ -382,7 +401,7 @@ function createSalaryTab_(ss, year, month) {
         const workDays = workingDaysInMonth(year, month)
         const perDay = workDays > 0 ? monthly / workDays : 0
         sh.appendRow([idx + 1, e.Name, monthly, 0, workDays, 0, 0, 0, 0, 0,
-          perDay, 0, 0, 'OK', 0])
+          perDay, 0, 0, 'OK', 0, 0])
       })
     }
   }
@@ -939,9 +958,7 @@ function markAttendance(body) {
     empRowIdx = allVals.length
   }
 
-  const finalStatus = (status || 'present').toUpperCase()
-  const displayStatus = finalStatus === 'PRESENT' ? 'P' : finalStatus === 'ABSENT' ? 'A' :
-    finalStatus === 'WEEKOFF' ? 'WO' : finalStatus === 'WOP' ? 'WOP' : finalStatus === 'NA' ? 'NA' : finalStatus
+  const displayStatus = toDisplayStatus_(status)
 
   // Write to cell (row is 1-indexed in sheet, +1 for header)
   const cell = sh.getRange(empRowIdx + 1, dateColIdx + 1)
@@ -1013,9 +1030,7 @@ function markAttendanceBulk(body) {
       nameToRow[normName_(emp.name)] = rowIdx
     }
 
-    const finalStatus = (entry.status || 'present').toUpperCase()
-    const displayStatus = finalStatus === 'PRESENT' ? 'P' : finalStatus === 'ABSENT' ? 'A' :
-      finalStatus === 'WEEKOFF' ? 'WO' : finalStatus === 'WOP' ? 'WOP' : finalStatus === 'NA' ? 'NA' : finalStatus
+    const displayStatus = toDisplayStatus_(entry.status)
 
     const cell = sh.getRange(rowIdx + 1, dateColIdx + 1)
     cell.setValue(displayStatus)
@@ -1093,9 +1108,7 @@ function markAttendanceForDate(body) {
       nameToRow[normName_(emp.name)] = rowIdx
     }
 
-    const finalStatus = (entry.status || 'present').toUpperCase()
-    const displayStatus = finalStatus === 'PRESENT' ? 'P' : finalStatus === 'ABSENT' ? 'A' :
-      finalStatus === 'WEEKOFF' ? 'WO' : finalStatus === 'WOP' ? 'WOP' : finalStatus === 'NA' ? 'NA' : finalStatus
+    const displayStatus = toDisplayStatus_(entry.status)
 
     const cell = sh.getRange(rowIdx + 1, dateColIdx + 1)
     cell.setValue(displayStatus)
@@ -1187,7 +1200,7 @@ function getTodaySummary() {
         employees.forEach(e => typeMap[e.Name.toLowerCase().trim()] = e.Type)
         vals.slice(1).forEach(row => {
           const status = String(row[dateColIdx] || '').toUpperCase()
-          if (status === 'P') {
+          if (status === 'P' || status === 'H') { // half day = came to work, so counts as present
             const name = String(row[1]).toLowerCase().trim()
             const empType = typeMap[name] || ''
             if (empType === 'office') officePresent++
@@ -1297,7 +1310,7 @@ function getMonthlyAttendance(employeeId, year, month) {
       const ds = year + '-' + String(month).padStart(2, '0') + '-' + String(d).padStart(2, '0')
       const colIdx = findDateColIdx_(headers, dateObj)
       const status = empRow && colIdx > -1 ? String(empRow[colIdx] || '').toUpperCase() : null
-      const normalized = status === 'P' ? 'present' : status === 'A' ? 'absent' :
+      const normalized = status === 'P' ? 'present' : status === 'H' ? 'half' : status === 'A' ? 'absent' :
         status === 'WO' ? 'weekoff' : status === 'WOP' ? 'wop' : status === 'NA' ? 'na' : null
       days.push({ date: ds, status: normalized })
     }
@@ -1338,8 +1351,9 @@ function getAttendanceHistory(employeeId) {
       const colIdx = findDateColIdx_(headers, dateObj)
       const s = empRow && colIdx > -1 ? String(empRow[colIdx] || '') : ''
       if (s) {
-        const normalized = s === 'P' ? 'present' : s === 'A' ? 'absent' :
-          s === 'WO' ? 'weekoff' : s === 'WOP' ? 'wop' : 'na'
+        const su = s.toUpperCase().trim()
+        const normalized = su === 'P' ? 'present' : su === 'H' ? 'half' : su === 'A' ? 'absent' :
+          su === 'WO' ? 'weekoff' : su === 'WOP' ? 'wop' : 'na'
         history.push({ date: ds, status: normalized })
       }
     }
@@ -1364,6 +1378,11 @@ function syncSalarySheet_(year, month) {
   if (String(salSh.getRange(1, 15).getValue() || '') !== 'NA Count') {
     salSh.getRange(1, 15).setValue('NA Count')
     formatHeader_(salSh, 15)
+  }
+  // Same self-heal for the new "H Count" (Half Day) column
+  if (String(salSh.getRange(1, 16).getValue() || '') !== 'H Count') {
+    salSh.getRange(1, 16).setValue('H Count')
+    formatHeader_(salSh, 16)
   }
 
   const attVals = attSh.getDataRange().getValues()
@@ -1397,9 +1416,9 @@ function syncSalarySheet_(year, month) {
     const newRows = namesNeeded.map((name, idx) => {
       const monthly = empSalaryByName[normName_(name)] || 0
       const perDay = workDays > 0 ? monthly / workDays : 0
-      return [startSNo + idx, name, monthly, 0, workDays, 0, 0, 0, 0, 0, perDay, 0, 0, 'OK', 0]
+      return [startSNo + idx, name, monthly, 0, workDays, 0, 0, 0, 0, 0, perDay, 0, 0, 'OK', 0, 0]
     })
-    salSh.getRange(salVals.length + 1, 1, newRows.length, 15).setValues(newRows)
+    salSh.getRange(salVals.length + 1, 1, newRows.length, 16).setValues(newRows)
     salVals = salSh.getDataRange().getValues() // re-read so the rest of the sync sees the new rows
   }
 
@@ -1412,7 +1431,7 @@ function syncSalarySheet_(year, month) {
   attVals.slice(1).forEach(row => {
     const name = normName_(row[1])
     if (!name) return
-    if (!tally[name]) tally[name] = { P: 0, A: 0, WO: 0, WOP: 0, NA: 0 }
+    if (!tally[name]) tally[name] = { P: 0, H: 0, A: 0, WO: 0, WOP: 0, NA: 0 }
     const t = tally[name]
     attHeaders.slice(2).forEach((h, i) => {
       const s = String(row[i + 2] || '').toUpperCase().trim()
@@ -1435,9 +1454,10 @@ function syncSalarySheet_(year, month) {
     const advanceCol = []
     const block = []
     const naBlock = []
+    const hBlock = []
     for (let i = 1; i < salVals.length; i++) {
       const name = normName_(salVals[i][1])
-      const t = tally[name] || { P: 0, A: 0, WO: 0, WOP: 0, NA: 0 }
+      const t = tally[name] || { P: 0, H: 0, A: 0, WO: 0, WOP: 0, NA: 0 }
       // Pull the current monthly salary from the Employees sheet if this
       // person is still on the roster there — that's the source of truth.
       // Only fall back to whatever's already in the Salary sheet if they
@@ -1450,7 +1470,10 @@ function syncSalarySheet_(year, month) {
       // means someone came in on their day off, so it's paid DOUBLE — and
       // now Paid Days shows that too (counts as 2), so the column always
       // matches what's actually being paid instead of looking like 1 day.
-      const payableUnits = t.P + t.WO + (t.WOP * 2)
+      // H (Half Day) is paid as 0.5 of a day. So:
+      //   Paid Days = P + H×0.5 + WO + WOP×2
+      //   Gross     = Paid Days × (Monthly Salary ÷ days in month)
+      const payableUnits = t.P + (t.H * 0.5) + t.WO + (t.WOP * 2)
       const paidDays = payableUnits
       const gross = Math.round(payableUnits * perDay)
       const net = Math.max(gross - advance, 0)
@@ -1460,6 +1483,7 @@ function syncSalarySheet_(year, month) {
       advanceCol.push([advance])
       block.push([workDays, t.P, t.A, t.WO, t.WOP, paidDays, perDay, gross, net, warning])
       naBlock.push([t.NA || 0])
+      hBlock.push([t.H || 0])
     }
     // Column 3 = Monthly Salary (kept in sync with the Employees sheet)
     salSh.getRange(2, 3, numRows, 1).setValues(salaryCol)
@@ -1469,6 +1493,8 @@ function syncSalarySheet_(year, month) {
     salSh.getRange(2, 5, numRows, 10).setValues(block)
     // Column 15 = NA Count
     salSh.getRange(2, 15, numRows, 1).setValues(naBlock)
+    // Column 16 = H Count (Half Days)
+    salSh.getRange(2, 16, numRows, 1).setValues(hBlock)
   }
 }
 
@@ -1516,6 +1542,7 @@ function getMonthlySalary(year, month) {
       WeekOff: r['WO Count'] || 0,
       WOP: r['WOP Count'] || 0,
       NA: r['NA Count'] || 0,
+      Half: r['H Count'] || 0,
       TotalDays: r['Total Days'] || 0,
       PaidDays: r['Paid Days'] || 0,
       PerDaySalary: parseFloat(r['Per Day Salary']) || 0,
@@ -1839,4 +1866,108 @@ function recalcAllMonthsFor31DayFix() {
 function initLogsTab() {
   getLogsSheet_()
   Logger.log('✅ Logs tab ready')
+}
+
+
+// ─── 5 PM "attendance not marked" email ───────────────────────────────────────
+// Every evening at 5 PM IST this emails ALERT_EMAIL a list of everyone whose
+// attendance has NOT been marked for today (blank cell in today's column).
+// Nothing is sent when everybody is already marked.
+//
+// ONE-TIME SETUP: open Apps Script, pick  installAttendanceReminderTrigger
+// in the function dropdown, click Run, and accept the permission prompt
+// (it needs permission to send email). Run it again any time to reset it —
+// it removes the old trigger first, so you never get duplicate emails.
+
+function getUnmarkedToday_() {
+  const now = new Date()
+  const ym = { year: now.getFullYear(), month: now.getMonth() + 1 }
+  const empSh = getEmpSheet()
+  const employees = (empSh && empSh.getLastRow() > 1) ? rows2obj_(empSh.getDataRange().getValues()) : []
+
+  const statusMap = {}
+  let colFound = false
+  const sh = getSS().getSheetByName(attTabName(ym.year, ym.month))
+  if (sh && sh.getLastRow() > 1) {
+    const vals = sh.getDataRange().getValues()
+    const dateColIdx = findDateColIdx_(vals[0], now)
+    if (dateColIdx > -1) {
+      colFound = true
+      vals.slice(1).forEach(row => {
+        const key = normName_(row[1])
+        if (key) statusMap[key] = String(row[dateColIdx] || '').trim()
+      })
+    }
+  }
+
+  const unmarked = employees
+    .filter(e => String(e.Name || '').trim())
+    .filter(e => !statusMap[normName_(e.Name)])
+    .map(e => ({
+      employeeId: String(e.EmployeeID || ''), name: String(e.Name),
+      type: e.Type || '', role: e.Role || '', phone: e.Phone || ''
+    }))
+  return { unmarked, total: employees.length, colFound }
+}
+
+function sendUnmarkedAttendanceAlert() {
+  const res = getUnmarkedToday_()
+  const today = Utilities.formatDate(new Date(), TZ, 'dd-MMM-yyyy (EEEE)')
+
+  if (!res.colFound) {
+    MailApp.sendEmail(ALERT_EMAIL, 'Sridhi Attendance — could not read today\'s column (' + today + ')',
+      'The attendance sheet has no column for today, so the 5 PM check could not run. Please open the attendance sheet.')
+    return { sent: true, count: 0 }
+  }
+  if (!res.unmarked.length) return { sent: false, count: 0 } // everyone marked — stay quiet
+
+  const rowsHtml = res.unmarked.map((e, i) =>
+    '<tr>' +
+    '<td style="padding:6px 10px;border:1px solid #ddd">' + (i + 1) + '</td>' +
+    '<td style="padding:6px 10px;border:1px solid #ddd"><b>' + e.name + '</b></td>' +
+    '<td style="padding:6px 10px;border:1px solid #ddd">' + e.employeeId + '</td>' +
+    '<td style="padding:6px 10px;border:1px solid #ddd">' + e.type + '</td>' +
+    '<td style="padding:6px 10px;border:1px solid #ddd">' + e.phone + '</td></tr>'
+  ).join('')
+
+  const html =
+    '<div style="font-family:Arial,sans-serif">' +
+    '<h3 style="margin:0 0 8px">Attendance not marked — ' + today + '</h3>' +
+    '<p>It is 5 PM and <b>' + res.unmarked.length + ' of ' + res.total + '</b> employees still have no attendance marked today:</p>' +
+    '<table style="border-collapse:collapse;font-size:14px"><tr style="background:#FFFF00">' +
+    '<th style="padding:6px 10px;border:1px solid #ddd">#</th><th style="padding:6px 10px;border:1px solid #ddd">Name</th>' +
+    '<th style="padding:6px 10px;border:1px solid #ddd">ID</th><th style="padding:6px 10px;border:1px solid #ddd">Type</th>' +
+    '<th style="padding:6px 10px;border:1px solid #ddd">Phone</th></tr>' + rowsHtml + '</table>' +
+    '<p style="color:#666;font-size:12px">Mark P / H / A / WO / WOP / NA in the Sridhi Ventures attendance app.</p></div>'
+
+  const plain = 'Attendance not marked — ' + today + '\n\n' +
+    res.unmarked.map((e, i) => (i + 1) + '. ' + e.name + ' (' + e.employeeId + ')').join('\n')
+
+  MailApp.sendEmail({
+    to: ALERT_EMAIL,
+    subject: 'Attendance not marked: ' + res.unmarked.length + ' employee(s) — ' + today,
+    body: plain,
+    htmlBody: html,
+    name: 'Sridhi Attendance'
+  })
+  return { sent: true, count: res.unmarked.length }
+}
+
+function installAttendanceReminderTrigger() {
+  ScriptApp.getProjectTriggers().forEach(t => {
+    if (t.getHandlerFunction() === 'sendUnmarkedAttendanceAlert') ScriptApp.deleteTrigger(t)
+  })
+  ScriptApp.newTrigger('sendUnmarkedAttendanceAlert')
+    .timeBased()
+    .everyDays(1)
+    .atHour(ALERT_HOUR)
+    .nearMinute(0)
+    .inTimezone(TZ)
+    .create()
+  Logger.log('Daily ' + ALERT_HOUR + ':00 (' + TZ + ') attendance reminder installed → ' + ALERT_EMAIL)
+}
+
+// Run this once by hand to test the email right now (sends only if someone is unmarked)
+function testUnmarkedAttendanceAlert() {
+  Logger.log(JSON.stringify(sendUnmarkedAttendanceAlert()))
 }

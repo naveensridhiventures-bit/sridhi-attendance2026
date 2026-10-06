@@ -11,6 +11,7 @@ import QRCodeDisplay from '../components/QRCodeDisplay.jsx'
 // WOP day rendered with NO background at all — an invisible calendar cell.
 const STATUS_STYLE = {
   present: 'bg-emerald-500 text-white',   // sheet: P = green
+  half:    'bg-orange-500 text-white',    // sheet: H = orange
   absent:  'bg-red-500 text-white',       // sheet: A = red
   weekoff: 'bg-yellow-400 text-ink',      // sheet: WO = yellow
   wop:     'bg-purple-600 text-white',    // sheet: WOP = purple
@@ -146,7 +147,7 @@ export default function EmployeeDashboard() {
   }
 
   const summary = useMemo(() => {
-    const s = { present: 0, weekoff: 0, wop: 0, na: 0, absent: 0 }
+    const s = { present: 0, half: 0, weekoff: 0, wop: 0, na: 0, absent: 0 }
     days.forEach((d) => {
       if (d.status && s[d.status] !== undefined) s[d.status]++
     })
@@ -210,6 +211,7 @@ export default function EmployeeDashboard() {
             </div>
             <div className="flex flex-wrap gap-x-3 gap-y-1.5 mt-3 text-[10px] text-slate-500">
               <Legend color="bg-emerald-500" label={`Present (${summary.present})`} />
+              <Legend color="bg-orange-500" label={`Half Day (${summary.half})`} />
               <Legend color="bg-red-500" label={`Absent (${summary.absent})`} />
               <Legend color="bg-yellow-400" label={`Week Off (${summary.weekoff})`} />
               <Legend color="bg-purple-600" label={`WOP (${summary.wop})`} />

@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { markAttendanceForDate, getAttendanceForDate } from '../api/sheetApi.js'
 import { useToast } from './Toast.jsx'
-import { STATUS_OPTIONS, getStatusMeta } from '../utils/attendanceStatus.js'
+import { STATUS_OPTIONS, STATUS_SHEET_CODE, getStatusMeta } from '../utils/attendanceStatus.js'
 import { haptics } from '../utils/haptics.js'
 
 function todayISO() {
@@ -107,8 +107,7 @@ export default function EditAttendanceByDate({ employees }) {
         const name = employees.find((e) => e.employeeId === id)?.name
         if (okNames.includes(name)) {
           const s = getStatusMeta(status)
-          next[id] = s.key === 'present' ? 'P' : s.key === 'absent' ? 'A' :
-            s.key === 'weekoff' ? 'WO' : s.key === 'wop' ? 'WOP' : s.key === 'na' ? 'NA' : status
+          next[id] = STATUS_SHEET_CODE[s.key] || status
         }
       })
       return next
@@ -151,7 +150,7 @@ export default function EditAttendanceByDate({ employees }) {
       {/* 2. Status to apply */}
       <div>
         <label className="block text-xs text-slate-500 mb-1.5 font-semibold uppercase tracking-wide">Set status to</label>
-        <div className="grid grid-cols-5 gap-1.5">
+        <div className="grid grid-cols-6 gap-1.5">
           {STATUS_OPTIONS.map((opt) => (
             <button
               key={opt.key}
