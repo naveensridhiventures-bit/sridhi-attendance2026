@@ -33,8 +33,8 @@ const COLORS = {
   NA:  '#4169E1'   // Blue
 }
 
-// Where the 5 PM "attendance not marked" reminder is sent
-const ALERT_EMAIL = 'naveensridhiventures@gmail.com'
+// Who receives the 5 PM daily attendance report
+const ALERT_EMAILS = ['naveensridhiventures@gmail.com', 'hiring.sridhi@gmail.com']
 const ALERT_HOUR = 17 // 5 PM (IST)
 
 // Converts whatever status the app/sheet sends into the code stored in the sheet cell.
@@ -1869,22 +1869,36 @@ function initLogsTab() {
 }
 
 
-// ─── 5 PM "attendance not marked" email ───────────────────────────────────────
-// Every evening at 5 PM IST this emails ALERT_EMAIL a list of everyone whose
-// attendance has NOT been marked for today (blank cell in today's column).
-// Nothing is sent when everybody is already marked.
+// ─── 5 PM daily attendance report (email) ─────────────────────────────────────
+// Every evening at 5 PM IST, ALERT_EMAILS get one short report so management
+// can decide quickly:
+//   • who took PERMISSION today
+//   • who is ABSENT (A), WOP, WO, Half Day (H)
+//   • who is still NOT MARKED
+// It is sent every day (even if everything is fine).
 //
-// ONE-TIME SETUP: open Apps Script, pick  installAttendanceReminderTrigger
-// in the function dropdown, click Run, and accept the permission prompt
-// (it needs permission to send email). Run it again any time to reset it —
-// it removes the old trigger first, so you never get duplicate emails.
+// ONE-TIME SETUP: in Apps Script pick  installAttendanceReminderTrigger
+// from the function dropdown, click Run, accept the permission prompt
+// (needs permission to send email). Re-running is safe — old triggers are
+// removed first, so you never get duplicate emails.
+//
+// HOW "5 PM SHARP" WORKS: a plain daily trigger can fire up to ~15 min late,
+// so instead a tiny 1-minute trigger checks the clock and sends the moment
+// it is 5:00 PM IST (once per day; if a run is skipped it still sends within
+// the next 30 minutes).
 
-function getUnmarkedToday_() {
+function esc_(t) {
+  return String(t == null ? '' : t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+}
+
+function buildDailyReport_() {
   const now = new Date()
   const ym = { year: now.getFullYear(), month: now.getMonth() + 1 }
+  const today = todayStr()
   const empSh = getEmpSheet()
   const employees = (empSh && empSh.getLastRow() > 1) ? rows2obj_(empSh.getDataRange().getValues()) : []
 
+  // today's status per employee name
   const statusMap = {}
   let colFound = false
   const sh = getSS().getSheetByName(attTabName(ym.year, ym.month))
@@ -1895,79 +1909,125 @@ function getUnmarkedToday_() {
       colFound = true
       vals.slice(1).forEach(row => {
         const key = normName_(row[1])
-        if (key) statusMap[key] = String(row[dateColIdx] || '').trim()
+        if (key) statusMap[key] = String(row[dateColIdx] || '').toUpperCase().trim()
       })
     }
   }
 
-  const unmarked = employees
-    .filter(e => String(e.Name || '').trim())
-    .filter(e => !statusMap[normName_(e.Name)])
-    .map(e => ({
-      employeeId: String(e.EmployeeID || ''), name: String(e.Name),
-      type: e.Type || '', role: e.Role || '', phone: e.Phone || ''
-    }))
-  return { unmarked, total: employees.length, colFound }
+  const g = { P: [], H: [], A: [], WO: [], WOP: [], NA: [], NONE: [] }
+  employees.forEach(e => {
+    const name = String(e.Name || '').trim()
+    if (!name) return
+    const st = statusMap[normName_(name)] || ''
+    if (!st) g.NONE.push(name)
+    else if (g[st]) g[st].push(name)
+  })
+
+  // permissions requested for TODAY (ignore rejected ones)
+  const perms = (getPermissionsForMonth(ym.year, ym.month).requests || [])
+    .filter(r => String(r.date) === today && String(r.status || '').toLowerCase() !== 'rejected')
+
+  return { today, total: employees.length, colFound, g, perms }
 }
 
-function sendUnmarkedAttendanceAlert() {
-  const res = getUnmarkedToday_()
-  const today = Utilities.formatDate(new Date(), TZ, 'dd-MMM-yyyy (EEEE)')
+function sendDailyAttendanceReport() {
+  const r = buildDailyReport_()
+  const dateLabel = Utilities.formatDate(new Date(), TZ, 'dd-MMM-yyyy (EEEE)')
+  const subject = 'Attendance Report 5 PM — ' + dateLabel
 
-  if (!res.colFound) {
-    MailApp.sendEmail(ALERT_EMAIL, 'Sridhi Attendance — could not read today\'s column (' + today + ')',
-      'The attendance sheet has no column for today, so the 5 PM check could not run. Please open the attendance sheet.')
-    return { sent: true, count: 0 }
+  if (!r.colFound) {
+    MailApp.sendEmail({ to: ALERT_EMAILS.join(','), subject: subject,
+      body: 'Could not read today\'s column in the attendance sheet, so the 5 PM report could not be prepared. Please open the attendance sheet.',
+      name: 'Sridhi Attendance' })
+    return { sent: true, ok: false }
   }
-  if (!res.unmarked.length) return { sent: false, count: 0 } // everyone marked — stay quiet
 
-  const rowsHtml = res.unmarked.map((e, i) =>
-    '<tr>' +
-    '<td style="padding:6px 10px;border:1px solid #ddd">' + (i + 1) + '</td>' +
-    '<td style="padding:6px 10px;border:1px solid #ddd"><b>' + e.name + '</b></td>' +
-    '<td style="padding:6px 10px;border:1px solid #ddd">' + e.employeeId + '</td>' +
-    '<td style="padding:6px 10px;border:1px solid #ddd">' + e.type + '</td>' +
-    '<td style="padding:6px 10px;border:1px solid #ddd">' + e.phone + '</td></tr>'
-  ).join('')
+  const names = a => a.length ? a.join(', ') : 'None'
+  const permLines = r.perms.map(p => p.name + ' — ' + (p.hours || '?') + (p.reason ? ' (' + p.reason + ')' : '') + ' [' + (p.status || 'pending') + ']')
+
+  // ── plain-text version ──
+  const lines = [
+    'Attendance report — ' + dateLabel, '',
+    'Total staff: ' + r.total + ' | Present: ' + r.g.P.length + ' | Half Day: ' + r.g.H.length +
+      ' | Absent: ' + r.g.A.length + ' | WO: ' + r.g.WO.length + ' | WOP: ' + r.g.WOP.length +
+      ' | Not marked: ' + r.g.NONE.length, '',
+    'PERMISSION today (' + permLines.length + '): ' + (permLines.length ? '' : 'None')
+  ].concat(permLines.map(x => '  • ' + x)).concat([
+    '',
+    'ABSENT (' + r.g.A.length + '): ' + names(r.g.A),
+    'WOP - worked on week off (' + r.g.WOP.length + '): ' + names(r.g.WOP),
+    'WO - week off (' + r.g.WO.length + '): ' + names(r.g.WO),
+    'HALF DAY (' + r.g.H.length + '): ' + names(r.g.H),
+    'NOT MARKED (' + r.g.NONE.length + '): ' + names(r.g.NONE),
+    '', 'Please review and decide. — Sridhi Ventures Attendance'
+  ])
+
+  // ── HTML version ──
+  const row = (label, color, arr, extraHtml) =>
+    '<tr><td style="padding:8px 12px;border:1px solid #ddd;background:' + color + ';white-space:nowrap"><b>' + label + ' (' + arr + ')</b></td>' +
+    '<td style="padding:8px 12px;border:1px solid #ddd">' + extraHtml + '</td></tr>'
+  const listHtml = a => a.length ? a.map(esc_).join(', ') : '<span style="color:#888">None</span>'
+  const permHtml = permLines.length ? permLines.map(x => '• ' + esc_(x)).join('<br>') : '<span style="color:#888">None</span>'
 
   const html =
-    '<div style="font-family:Arial,sans-serif">' +
-    '<h3 style="margin:0 0 8px">Attendance not marked — ' + today + '</h3>' +
-    '<p>It is 5 PM and <b>' + res.unmarked.length + ' of ' + res.total + '</b> employees still have no attendance marked today:</p>' +
-    '<table style="border-collapse:collapse;font-size:14px"><tr style="background:#FFFF00">' +
-    '<th style="padding:6px 10px;border:1px solid #ddd">#</th><th style="padding:6px 10px;border:1px solid #ddd">Name</th>' +
-    '<th style="padding:6px 10px;border:1px solid #ddd">ID</th><th style="padding:6px 10px;border:1px solid #ddd">Type</th>' +
-    '<th style="padding:6px 10px;border:1px solid #ddd">Phone</th></tr>' + rowsHtml + '</table>' +
-    '<p style="color:#666;font-size:12px">Mark P / H / A / WO / WOP / NA in the Sridhi Ventures attendance app.</p></div>'
-
-  const plain = 'Attendance not marked — ' + today + '\n\n' +
-    res.unmarked.map((e, i) => (i + 1) + '. ' + e.name + ' (' + e.employeeId + ')').join('\n')
+    '<div style="font-family:Arial,sans-serif;font-size:14px">' +
+    '<h3 style="margin:0 0 6px">Attendance report — ' + esc_(dateLabel) + '</h3>' +
+    '<p style="margin:0 0 12px">Total <b>' + r.total + '</b> · Present <b>' + r.g.P.length + '</b> · Half Day <b>' + r.g.H.length +
+    '</b> · Absent <b>' + r.g.A.length + '</b> · Not marked <b>' + r.g.NONE.length + '</b></p>' +
+    '<table style="border-collapse:collapse">' +
+    row('Permission today', '#E8F0FE', permLines.length, permHtml) +
+    row('Absent', '#FFD6D6', r.g.A.length, listHtml(r.g.A)) +
+    row('WOP', '#E9D5FF', r.g.WOP.length, listHtml(r.g.WOP)) +
+    row('WO', '#FFFFB3', r.g.WO.length, listHtml(r.g.WO)) +
+    row('Half Day', '#FFE0B2', r.g.H.length, listHtml(r.g.H)) +
+    row('Not marked', '#EEEEEE', r.g.NONE.length, listHtml(r.g.NONE)) +
+    '</table><p style="color:#666;font-size:12px;margin-top:12px">Please review and decide. — Sridhi Ventures Attendance</p></div>'
 
   MailApp.sendEmail({
-    to: ALERT_EMAIL,
-    subject: 'Attendance not marked: ' + res.unmarked.length + ' employee(s) — ' + today,
-    body: plain,
+    to: ALERT_EMAILS.join(','),
+    subject: subject + (r.g.NONE.length ? ' — ' + r.g.NONE.length + ' not marked' : ''),
+    body: lines.join('\n'),
     htmlBody: html,
     name: 'Sridhi Attendance'
   })
-  return { sent: true, count: res.unmarked.length }
+  return { sent: true, ok: true }
+}
+
+// Runs every minute (cheap: exits immediately unless it is 5:00–5:29 PM IST
+// and today's report hasn't gone out yet).
+function attendanceReminderTick() {
+  const hour = parseInt(Utilities.formatDate(new Date(), TZ, 'H'), 10)
+  const minute = parseInt(Utilities.formatDate(new Date(), TZ, 'm'), 10)
+  if (hour !== ALERT_HOUR || minute > 29) return
+
+  const lock = LockService.getScriptLock()
+  if (!lock.tryLock(10000)) return
+  try {
+    const props = PropertiesService.getScriptProperties()
+    const today = todayStr()
+    if (props.getProperty('lastReportDate') === today) return // already sent today
+    props.setProperty('lastReportDate', today) // mark first so a retry can never double-send
+    try {
+      sendDailyAttendanceReport()
+    } catch (err) {
+      props.deleteProperty('lastReportDate') // let the next minute retry
+      throw err
+    }
+  } finally {
+    lock.releaseLock()
+  }
 }
 
 function installAttendanceReminderTrigger() {
   ScriptApp.getProjectTriggers().forEach(t => {
-    if (t.getHandlerFunction() === 'sendUnmarkedAttendanceAlert') ScriptApp.deleteTrigger(t)
+    const fn = t.getHandlerFunction()
+    if (fn === 'sendUnmarkedAttendanceAlert' || fn === 'attendanceReminderTick') ScriptApp.deleteTrigger(t)
   })
-  ScriptApp.newTrigger('sendUnmarkedAttendanceAlert')
-    .timeBased()
-    .everyDays(1)
-    .atHour(ALERT_HOUR)
-    .nearMinute(0)
-    .inTimezone(TZ)
-    .create()
-  Logger.log('Daily ' + ALERT_HOUR + ':00 (' + TZ + ') attendance reminder installed → ' + ALERT_EMAIL)
+  ScriptApp.newTrigger('attendanceReminderTick').timeBased().everyMinutes(1).create()
+  Logger.log('Installed: report goes to ' + ALERT_EMAILS.join(', ') + ' at ' + ALERT_HOUR + ':00 ' + TZ + ' every day')
 }
 
-// Run this once by hand to test the email right now (sends only if someone is unmarked)
-function testUnmarkedAttendanceAlert() {
-  Logger.log(JSON.stringify(sendUnmarkedAttendanceAlert()))
+// Run by hand any time to send today's report immediately (for testing)
+function testDailyAttendanceReport() {
+  Logger.log(JSON.stringify(sendDailyAttendanceReport()))
 }
