@@ -267,3 +267,81 @@ button:active, a:active {
   to   { opacity: 1; filter: blur(0); }
 }
 .media-in { animation: mediaIn 1s ease both; }
+
+/* ---------------- Hero photo motion (admin picks one) ---------------- */
+@keyframes heroZoom {
+  from { transform: scale(1.04) translate3d(0, 0, 0); }
+  to   { transform: scale(1.2) translate3d(-2.5%, -2%, 0); }
+}
+@keyframes heroPan {
+  from { transform: scale(1.28) translate3d(-6%, 0, 0); }
+  to   { transform: scale(1.28) translate3d(6%, 0, 0); }
+}
+@keyframes heroDrift {
+  0%   { transform: scale(1.18) translate3d(0, 0, 0) rotate(0deg); }
+  25%  { transform: scale(1.22) translate3d(-3%, -2%, 0) rotate(0.5deg); }
+  50%  { transform: scale(1.25) translate3d(-1%, -4%, 0) rotate(0deg); }
+  75%  { transform: scale(1.21) translate3d(3%, -1.5%, 0) rotate(-0.5deg); }
+  100% { transform: scale(1.18) translate3d(0, 0, 0) rotate(0deg); }
+}
+@keyframes heroBreathe {
+  0%, 100% { transform: scale(1.05); }
+  50%      { transform: scale(1.17); }
+}
+/* --spd is set by the admin's speed choice: slow 1.7, normal 1, fast 0.55 */
+.hero-anim { will-change: transform; transform-origin: 50% 40%; }
+.hero-anim-zoom    { animation: heroZoom    calc(20s * var(--spd, 1)) ease-in-out infinite alternate; }
+.hero-anim-pan     { animation: heroPan     calc(16s * var(--spd, 1)) ease-in-out infinite alternate; }
+.hero-anim-drift   { animation: heroDrift   calc(26s * var(--spd, 1)) ease-in-out infinite; }
+.hero-anim-breathe { animation: heroBreathe calc(6s * var(--spd, 1)) ease-in-out infinite; }
+.hero-anim-reveal  { animation: heroZoom    calc(24s * var(--spd, 1)) ease-in-out infinite alternate; }
+
+/* Curtain reveal: the photo wipes in from the left every time the app opens */
+@keyframes heroWipe {
+  0%   { clip-path: inset(0 100% 0 0); filter: brightness(1.7); }
+  60%  { clip-path: inset(0 0 0 0); }
+  100% { clip-path: inset(0 0 0 0); filter: brightness(1); }
+}
+.hero-wipe { animation: heroWipe 2.2s cubic-bezier(0.77, 0, 0.18, 1) both; }
+
+/* ---------------- Hero effects (any combination, over photo or video) ---------------- */
+@keyframes fxTwinkle {
+  0%, 100% { opacity: 0; transform: scale(0.4) rotate(0deg); }
+  50%      { opacity: 1; transform: scale(1) rotate(45deg); }
+}
+.fx-spark {
+  position: absolute;
+  animation: fxTwinkle calc(var(--d, 3s) * var(--spd, 1)) ease-in-out infinite;
+  animation-delay: var(--delay, 0s);
+}
+@keyframes fxSweep {
+  0%, 50% { transform: translateX(-160%) skewX(-18deg); }
+  100%    { transform: translateX(340%) skewX(-18deg); }
+}
+.fx-sweep {
+  position: absolute; top: -10%; bottom: -10%; left: 0; width: 36%;
+  background: linear-gradient(100deg, transparent, rgba(255,255,255,0.4), rgba(255,236,170,0.28), transparent);
+  filter: blur(6px);
+  animation: fxSweep calc(7s * var(--spd, 1)) ease-in-out infinite;
+}
+@keyframes fxBokeh {
+  0%   { transform: translate3d(0, 0, 0) scale(0.6); opacity: 0; }
+  15%  { opacity: 0.8; }
+  100% { transform: translate3d(var(--bx, 20px), -440px, 0) scale(1.15); opacity: 0; }
+}
+.fx-bokeh {
+  position: absolute; bottom: -70px; border-radius: 9999px;
+  background: radial-gradient(circle at 35% 35%, rgba(255,255,255,0.9), rgba(255,226,140,0.38) 55%, transparent 72%);
+  animation: fxBokeh calc(var(--d, 9s) * var(--spd, 1)) ease-in infinite;
+  animation-delay: var(--delay, 0s);
+}
+@keyframes fxConfetti {
+  0%   { transform: translate3d(0, -20px, 0) rotate(0deg); opacity: 0; }
+  8%   { opacity: 1; }
+  100% { transform: translate3d(var(--cx, 20px), 520px, 0) rotate(var(--cr, 540deg)); opacity: 0.9; }
+}
+.fx-confetti {
+  position: absolute; top: -14px; width: 7px; height: 12px; border-radius: 2px;
+  animation: fxConfetti calc(var(--d, 6s) * var(--spd, 1)) linear infinite;
+  animation-delay: var(--delay, 0s);
+}

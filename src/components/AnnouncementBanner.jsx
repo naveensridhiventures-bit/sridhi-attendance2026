@@ -1,5 +1,6 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { getAnnouncement } from '../api/sheetApi.js'
+import RichText from './RichText.jsx'
 
 const TYPE_CONFIG = {
   announcement: {
@@ -62,6 +63,112 @@ function SparkleIcon({ size, delay, style }) {
   )
 }
 
+const COLLAPSED_PX = 150
+
+// The message card. Long messages open collapsed with a soft fade and a "Read more" button.
+// `preview` is used by the admin screen: same look, no dismiss button.
+export function AnnouncementCard({ data, onDismiss, preview = false }) {
+  const cfg = TYPE_CONFIG[data.type] || TYPE_CONFIG.announcement
+  const timeAgo = data.postedAt ? getTimeAgo(data.postedAt) : ''
+  const innerRef = useRef(null)
+  const [full, setFull] = useState(0)
+  const [open, setOpen] = useState(false)
+
+  // Measure the real text height (and keep it right when fonts load or the screen is resized)
+  useLayoutEffect(() => {
+    const el = innerRef.current
+    if (!el) return undefined
+    const measure = () => setFull(el.offsetHeight)
+    measure()
+    if (typeof ResizeObserver === 'undefined') return undefined
+    const ro = new ResizeObserver(measure)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [data.message, data.title])
+
+  const overflow = full > COLLAPSED_PX + 30
+  const shown = !overflow || open ? full : COLLAPSED_PX
+
+  return (
+    <div
+      className={`relative rounded-3xl bg-gradient-to-br ${cfg.gradient} p-5 mb-4 overflow-hidden ${preview ? '' : 'animate-popIn'} shadow-lg`}
+      style={{ boxShadow: `0 8px 32px -4px ${cfg.glow}` }}
+    >
+      {/* Bokeh blobs */}
+      <div className="absolute -right-8 -top-8 w-32 h-32 rounded-full bg-white/10 blur-sm" />
+      <div className="absolute -left-4 -bottom-6 w-24 h-24 rounded-full bg-white/10 blur-sm" />
+
+      {/* Animated sparkles */}
+      {SPARKLE_POSITIONS.map((sp, i) => (
+        <SparkleIcon key={i} size={sp.size} delay={sp.delay} style={{ top: sp.top, left: sp.left, right: sp.right, bottom: sp.bottom }} />
+      ))}
+
+      {/* Moving shimmer streak */}
+      <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -skew-x-12 animate-shimmerStreak" />
+
+      <div className="relative z-10">
+        {/* Header: icon, type, time, dismiss */}
+        <div className="flex items-center justify-between gap-3 mb-3">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-11 h-11 shrink-0 rounded-2xl bg-white/20 backdrop-blur-sm flex items-center justify-center text-2xl shadow-inner border border-white/25 animate-iconBounce">
+              {cfg.icon}
+            </div>
+            <div className="min-w-0">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-white/75">{cfg.label}</p>
+              {timeAgo && <p className="text-[10px] text-white/55">{timeAgo}</p>}
+            </div>
+          </div>
+          {!preview && onDismiss && (
+            <button
+              onClick={onDismiss}
+              aria-label="Dismiss message"
+              className="shrink-0 w-7 h-7 rounded-full bg-white/15 flex items-center justify-center text-white/70 hover:bg-white/25 transition-colors"
+            >
+              <svg viewBox="0 0 24 24" width="12" height="12" stroke="currentColor" strokeWidth="2.5" fill="none">
+                <path d="M18 6L6 18M6 6l12 12" strokeLinecap="round" />
+              </svg>
+            </button>
+          )}
+        </div>
+
+        {/* Title + body */}
+        <div
+          className="relative overflow-hidden transition-[max-height] duration-500 ease-in-out"
+          style={{ maxHeight: full ? shown : undefined }}
+        >
+          <div ref={innerRef}>
+            {data.title && <h3 className="text-white font-display font-bold text-xl leading-tight mb-2.5 break-words">{data.title}</h3>}
+            <RichText text={data.message} className="text-white/95 text-[15px] leading-relaxed" />
+          </div>
+          {overflow && !open && (
+            <div className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-black/40 to-transparent pointer-events-none" />
+          )}
+        </div>
+
+        {overflow && (
+          <button
+            onClick={() => setOpen((o) => !o)}
+            className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-white/20 hover:bg-white/30 text-white text-xs font-semibold px-3.5 py-1.5 transition-colors"
+          >
+            {open ? 'Show less' : 'Read more'}
+            <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"
+              className={`transition-transform duration-300 ${open ? 'rotate-180' : ''}`}>
+              <path d="m6 9 6 6 6-6" />
+            </svg>
+          </button>
+        )}
+
+        {data.authorName && (
+          <p className="text-white/65 text-[11px] mt-3 flex items-center gap-1.5">
+            <span className="w-4 h-4 rounded-full bg-white/25 inline-flex items-center justify-center text-[8px] font-bold">HR</span>
+            Posted by {data.authorName}
+          </p>
+        )}
+      </div>
+    </div>
+  )
+}
+
 export default function AnnouncementBanner() {
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -77,73 +184,7 @@ export default function AnnouncementBanner() {
   }, [])
 
   if (loading || !data || dismissed) return null
-
-  const cfg = TYPE_CONFIG[data.type] || TYPE_CONFIG.announcement
-  const timeAgo = data.postedAt ? getTimeAgo(data.postedAt) : ''
-
-  return (
-    <div
-      className={`relative rounded-3xl bg-gradient-to-br ${cfg.gradient} p-5 mb-4 overflow-hidden animate-popIn shadow-lg`}
-      style={{ boxShadow: `0 8px 32px -4px ${cfg.glow}` }}
-    >
-      {/* Bokeh blobs */}
-      <div className="absolute -right-8 -top-8 w-32 h-32 rounded-full bg-white/10 blur-sm" />
-      <div className="absolute -left-4 -bottom-6 w-24 h-24 rounded-full bg-white/10 blur-sm" />
-
-      {/* Animated sparkles */}
-      {SPARKLE_POSITIONS.map((s, i) => (
-        <SparkleIcon key={i} size={s.size} delay={s.delay} style={{
-          top: s.top, left: s.left, right: s.right, bottom: s.bottom
-        }} />
-      ))}
-
-      {/* Moving shimmer streak */}
-      <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -skew-x-12 animate-shimmerStreak" />
-
-      {/* Content */}
-      <div className="relative z-10">
-        <div className="flex items-start justify-between gap-3">
-          <div className="flex items-start gap-3 min-w-0">
-            {/* Icon bubble */}
-            <div className="w-12 h-12 shrink-0 rounded-2xl bg-white/20 backdrop-blur-sm flex items-center justify-center text-2xl shadow-inner border border-white/25 animate-iconBounce">
-              {cfg.icon}
-            </div>
-
-            <div className="min-w-0">
-              {/* Label + time */}
-              <div className="flex items-center gap-2 mb-1">
-                <span className="text-[10px] font-bold uppercase tracking-widest text-white/70">{cfg.label}</span>
-                {timeAgo && <span className="text-[10px] text-white/50">· {timeAgo}</span>}
-              </div>
-
-              {/* Message */}
-              <p className="text-white font-display font-semibold text-base leading-snug">
-                {data.message}
-              </p>
-
-              {/* Author */}
-              {data.authorName && (
-                <p className="text-white/60 text-[11px] mt-1.5 flex items-center gap-1">
-                  <span className="w-3.5 h-3.5 rounded-full bg-white/25 inline-flex items-center justify-center text-[8px]">HR</span>
-                  {data.authorName}
-                </p>
-              )}
-            </div>
-          </div>
-
-          {/* Dismiss */}
-          <button
-            onClick={() => setDismissed(true)}
-            className="shrink-0 w-7 h-7 rounded-full bg-white/15 flex items-center justify-center text-white/70 hover:bg-white/25 transition-colors mt-0.5"
-          >
-            <svg viewBox="0 0 24 24" width="12" height="12" stroke="currentColor" strokeWidth="2.5">
-              <path d="M18 6L6 18M6 6l12 12" strokeLinecap="round" />
-            </svg>
-          </button>
-        </div>
-      </div>
-    </div>
-  )
+  return <AnnouncementCard data={data} onDismiss={() => setDismissed(true)} />
 }
 
 function getTimeAgo(postedAt) {

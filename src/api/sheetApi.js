@@ -97,7 +97,40 @@ export const removeHomeHeroItem   = (url)                        => callApi('rem
 
 // ---------- HR Announcements ----------
 export const getAnnouncement      = ()                           => callApi('getAnnouncement')
-export const setAnnouncement      = (message, type, authorName)  => callApi('setAnnouncement', { message, type, authorName })
+export const setAnnouncement      = (message, type, authorName, title) => callApi('setAnnouncement', { message, type, authorName, title })
+
+// Long, multi-line messages can't fit in one request, so they are sent in small numbered parts
+// and stitched together by the script. Short messages go in a single call.
+function splitForUrl(str, budget = 1400) {
+  const parts = []
+  let cur = ''
+  let cost = 0
+  for (const ch of str) {
+    const c = encodeURIComponent(JSON.stringify(ch).slice(1, -1)).length
+    if (cost + c > budget && cur) { parts.push(cur); cur = ''; cost = 0 }
+    cur += ch
+    cost += c
+  }
+  if (cur) parts.push(cur)
+  return parts
+}
+
+export async function publishAnnouncement({ title = '', message, type, authorName }, onProgress) {
+  const obj = { title: title.trim(), message: message.trim(), type, authorName }
+  const json = JSON.stringify(obj)
+  if (encodeURIComponent(json).length <= 1500) {
+    if (onProgress) onProgress(1, 1)
+    return callApi('setAnnouncement', obj)
+  }
+  const parts = splitForUrl(json)
+  const sid = 'a' + Date.now().toString(36) + Math.floor(Math.random() * 1e4).toString(36)
+  let res = null
+  for (let i = 0; i < parts.length; i++) {
+    res = await callApi('announcementChunk', { sid, index: i, total: parts.length, part: parts[i] })
+    if (onProgress) onProgress(i + 1, parts.length)
+  }
+  return res
+}
 export const clearAnnouncement    = ()                           => callApi('clearAnnouncement')
 
 // ---------- HR / Salary ----------

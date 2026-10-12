@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react'
 import { getHomeHero, setHomeHero, removeHomeHeroItem } from '../api/sheetApi.js'
 import { useToast } from './Toast.jsx'
 import HomeHero from './HomeHero.jsx'
+import { SPEED_MUL } from './HeroEffects.jsx'
 import { CLOUDINARY } from '../config/cloudinary.js'
 import {
   extractDriveId, isDriveUrl, driveToMedia, cloudinaryOptimize, cloudinaryPoster, formatBytes
@@ -14,10 +15,48 @@ const MODES = [
   { key: 'image', label: 'Photo', sub: 'Slow zoom' }
 ]
 const GREETINGS = ['Welcome back', 'Happy Pongal 🌾', 'Happy Diwali 🪔', 'Happy New Year 🎉', 'Team of the month 🏆']
+
+const ANIMATIONS = [
+  { key: 'zoom', label: 'Slow zoom', hint: 'Gentle push-in' },
+  { key: 'pan', label: 'Cinematic pan', hint: 'Sweeps side to side' },
+  { key: 'drift', label: 'Floating drift', hint: 'Dreamy, wandering' },
+  { key: 'breathe', label: 'Breathing', hint: 'Soft in and out' },
+  { key: 'reveal', label: 'Curtain reveal', hint: 'Wipes in on open' },
+  { key: 'none', label: 'Still', hint: 'No movement' }
+]
+const SPEEDS = [
+  { key: 'slow', label: 'Slow' },
+  { key: 'normal', label: 'Normal' },
+  { key: 'fast', label: 'Fast' }
+]
+const EFFECTS = [
+  { key: 'sparkles', label: 'Sparkles', icon: '✨' },
+  { key: 'sweep', label: 'Light sweep', icon: '💡' },
+  { key: 'bokeh', label: 'Glow orbs', icon: '🫧' },
+  { key: 'confetti', label: 'Confetti', icon: '🎊' }
+]
+// One tap sets motion, speed and effects together
+const PRESETS = [
+  { key: 'festival', label: '🎉 Festival', animation: 'reveal', speed: 'normal', effects: ['sparkles', 'confetti'] },
+  { key: 'calm', label: '🌿 Calm', animation: 'breathe', speed: 'slow', effects: ['bokeh'] },
+  { key: 'premium', label: '✨ Premium', animation: 'pan', speed: 'slow', effects: ['sweep'] },
+  { key: 'energy', label: '⚡ Energetic', animation: 'drift', speed: 'fast', effects: ['sparkles', 'sweep'] }
+]
+
+// What counts as "changed". Motion only matters for photos; speed only when something moves.
+const sig = (h) => JSON.stringify({
+  t: h?.type || 'default',
+  u: h?.url || '',
+  hl: (h?.headline || '').trim(),
+  st: (h?.subtext || '').trim(),
+  a: h?.type === 'image' ? (h.animation ?? 'zoom') : '',
+  sp: h?.type === 'image' || (h?.effects || []).length ? (h?.speed || 'normal') : '',
+  fx: [...(h?.effects || [])].sort()
+})
 const MAX_VIDEO = 60 * 1024 * 1024
 const MAX_IMAGE = 10 * 1024 * 1024
 
-const EMPTY = { type: 'default', url: '', poster: '', headline: '', source: '' }
+const EMPTY = { type: 'default', url: '', poster: '', headline: '', subtext: '', animation: 'zoom', speed: 'normal', effects: [], source: '' }
 
 // Admin screen: choose what the Home page hero shows — the dragon video, your own video, or a photo.
 // Media is stored on Cloudinary (upload from here) or Google Drive (paste a share link); only the link is saved.
@@ -142,18 +181,15 @@ export default function HomeHeroManager() {
   }
 
   const mediaChosen = draft.type === 'default' || Boolean(draft.url)
-  const liveType = saved?.type || 'default'
-  const dirty =
-    draft.type !== liveType ||
-    (draft.url || '') !== (saved?.url || '') ||
-    (draft.headline || '').trim() !== (saved?.headline || '')
+  const dirty = sig(draft) !== sig(saved)
   const canPublish = dirty && mediaChosen && !upload && !saving
 
   async function publish() {
     setSaving(true)
     try {
       const r = await setHomeHero({
-        type: draft.type, url: draft.url, poster: draft.poster, headline: draft.headline, source: draft.source
+        type: draft.type, url: draft.url, poster: draft.poster, headline: draft.headline, subtext: draft.subtext,
+        animation: draft.animation, speed: draft.speed, effects: draft.effects, source: draft.source
       })
       setSaved(r.hero || null)
       setLibrary(r.library || [])
@@ -170,7 +206,15 @@ export default function HomeHeroManager() {
   }
 
   const modeIdx = Math.max(0, MODES.findIndex((m) => m.key === draft.type))
-  const previewHero = draft.url && draft.type !== 'default' ? draft : null
+  const previewHero = { ...draft, type: draft.url ? draft.type : 'default' }
+  const spdMul = SPEED_MUL[draft.speed] ?? 1
+
+  function toggleEffect(key) {
+    setDraft((d) => ({ ...d, effects: d.effects.includes(key) ? d.effects.filter((x) => x !== key) : [...d.effects, key] }))
+  }
+  function applyPreset(pr) {
+    setDraft((d) => ({ ...d, animation: pr.animation, speed: pr.speed, effects: pr.effects }))
+  }
 
   return (
     <div className="space-y-4">
@@ -182,7 +226,7 @@ export default function HomeHeroManager() {
             {loading ? 'Loading…' : dirty ? 'Not published yet' : 'Live now'}
           </span>
         </div>
-        <HomeHero hero={previewHero} headline={draft.headline.trim() || undefined} preview onMediaFail={() => setFailed(true)} />
+        <HomeHero hero={previewHero} headline={draft.headline.trim() || undefined} subtext={draft.subtext} preview onMediaFail={() => setFailed(true)} />
         {failed && (
           <div className="mt-2 rounded-xl bg-rust/10 border border-rust/30 px-3 py-2.5 text-[11px] text-rust leading-relaxed">
             This file can't be played, so the default is showing. For Google Drive, set sharing to <b>Anyone with the link</b>.
@@ -297,16 +341,129 @@ export default function HomeHeroManager() {
           </div>
         )}
 
+        {/* Motion & effects */}
+        <div className="space-y-3">
+          <div>
+            <p className="text-xs font-semibold text-ink mb-2">Quick styles</p>
+            <div className="flex flex-wrap gap-1.5">
+              {PRESETS.map((pr) => (
+                <button
+                  key={pr.key}
+                  onClick={() => applyPreset(pr)}
+                  className="text-[11px] rounded-full border border-brand-200 bg-brand-50 text-brand-700 px-3 py-1.5 font-semibold active:scale-95 transition-transform"
+                >
+                  {pr.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {draft.type === 'image' && (
+            <div className="animate-popIn">
+              <p className="text-xs font-semibold text-ink mb-2">Photo animation</p>
+              <div className="grid grid-cols-3 gap-2">
+                {ANIMATIONS.map((an) => {
+                  const on = (draft.animation ?? 'zoom') === an.key
+                  return (
+                    <button
+                      key={an.key}
+                      onClick={() => setDraft((d) => ({ ...d, animation: an.key }))}
+                      className={`text-left rounded-xl border p-1.5 transition-all duration-300 ${
+                        on ? 'border-brand-500 bg-brand-50 shadow-soft scale-[1.03]' : 'border-brand-100 bg-white'
+                      }`}
+                    >
+                      <span
+                        key={`${an.key}-${on}`}
+                        className={`block relative w-full h-14 rounded-lg overflow-hidden bg-brand-800 ${an.key === 'reveal' ? 'hero-wipe' : ''}`}
+                        style={{ '--spd': spdMul }}
+                      >
+                        <span className={`absolute inset-0 ${an.key !== 'none' ? `hero-anim hero-anim-${an.key}` : ''}`}>
+                          {draft.type === 'image' && draft.url ? (
+                            <img src={draft.url} alt="" className="absolute inset-0 w-full h-full object-cover" />
+                          ) : (
+                            <>
+                              <span className="absolute inset-0 bg-gradient-to-br from-brand-400 via-brand-600 to-gold-500" />
+                              <span className="absolute w-5 h-5 rounded-full bg-white/80 left-[28%] top-[22%]" />
+                              <span className="absolute w-3 h-3 rounded-full bg-gold-400 right-[22%] bottom-[24%]" />
+                            </>
+                          )}
+                        </span>
+                      </span>
+                      <span className="block text-[11px] font-semibold text-ink mt-1.5 leading-tight">{an.label}</span>
+                      <span className="block text-[9px] text-slate-400 leading-tight">{an.hint}</span>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
+          <div>
+            <p className="text-xs font-semibold text-ink mb-2">Effects <span className="font-normal text-slate-400">(pick any)</span></p>
+            <div className="grid grid-cols-2 gap-1.5">
+              {EFFECTS.map((fx) => {
+                const on = draft.effects.includes(fx.key)
+                return (
+                  <button
+                    key={fx.key}
+                    onClick={() => toggleEffect(fx.key)}
+                    className={`flex items-center gap-2 rounded-xl border px-3 py-2 text-left transition-all duration-300 ${
+                      on ? 'border-brand-500 bg-brand-50 shadow-card' : 'border-brand-100 bg-white'
+                    }`}
+                  >
+                    <span className="text-lg">{fx.icon}</span>
+                    <span className="text-xs font-semibold text-ink flex-1">{fx.label}</span>
+                    <span className={`w-4 h-4 rounded-full border-2 flex items-center justify-center text-[9px] text-white transition-all ${on ? 'bg-brand-500 border-brand-500' : 'border-slate-300'}`}>
+                      {on ? '✓' : ''}
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+
+          {(draft.type === 'image' || draft.effects.length > 0) && (
+            <div className="animate-popIn">
+              <p className="text-xs font-semibold text-ink mb-2">Speed</p>
+              <div className="grid grid-cols-3 gap-1.5 bg-surface rounded-2xl p-1">
+                {SPEEDS.map((sp) => (
+                  <button
+                    key={sp.key}
+                    onClick={() => setDraft((d) => ({ ...d, speed: sp.key }))}
+                    className={`py-1.5 rounded-xl text-xs font-semibold transition-all duration-300 ${
+                      draft.speed === sp.key ? 'bg-gradient-to-br from-brand-500 to-brand-700 text-white shadow-soft' : 'text-slate-500'
+                    }`}
+                  >
+                    {sp.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
         {/* Greeting */}
         <div>
           <p className="text-xs font-semibold text-ink mb-2">Greeting on the Home page</p>
           <input
             type="text"
-            maxLength={60}
+            maxLength={120}
             value={draft.headline}
             onChange={(e) => setDraft((d) => ({ ...d, headline: e.target.value }))}
             placeholder="Welcome back"
             className="input text-sm"
+          />
+          <div className="flex items-end justify-between mt-3 mb-1.5">
+            <p className="text-xs font-semibold text-ink">Message under the greeting <span className="font-normal text-slate-400">(optional)</span></p>
+            <p className="text-[10px] text-slate-400">{draft.subtext.length} / 500</p>
+          </div>
+          <textarea
+            rows={4}
+            maxLength={500}
+            value={draft.subtext}
+            onChange={(e) => setDraft((d) => ({ ...d, subtext: e.target.value }))}
+            placeholder={'Write a few lines for everyone.\nPress Enter for a new line.'}
+            className="input resize-y leading-relaxed text-sm"
           />
           <div className="flex flex-wrap gap-1.5 mt-2">
             {GREETINGS.map((g) => (

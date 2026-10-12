@@ -60,7 +60,7 @@ function toDisplayStatus_(raw) {
 const LIGHTWEIGHT_ACTIONS = new Set([
   'getAnnouncement', 'setAnnouncement', 'clearAnnouncement',
   'getHeroImage', 'setHeroImage',
-  'getHomeHero', 'setHomeHero', 'removeHomeHeroItem',
+  'getHomeHero', 'setHomeHero', 'removeHomeHeroItem', 'announcementChunk',
   'dashboardLogin', 'hrLogin',
   'getHrWhatsappNumber', 'setHrWhatsappNumber',
   'verifyAttendancePassword', 'setAttendancePassword',
@@ -139,7 +139,8 @@ function route_(body) {
   if (a === 'setHomeHero')           return setHomeHero(body.hero)
   if (a === 'removeHomeHeroItem')    return removeHomeHeroItem(body.url)
   if (a === 'getAnnouncement')       return getAnnouncement()
-  if (a === 'setAnnouncement')       return setAnnouncement(body.message, body.type, body.authorName)
+  if (a === 'setAnnouncement')       return setAnnouncement(body.message, body.type, body.authorName, body.title)
+  if (a === 'announcementChunk')     return announcementChunk(body.sid, body.index, body.total, body.part)
   if (a === 'clearAnnouncement')     return clearAnnouncement()
   if (a === 'getMonthlyTabsList')    return getMonthlyTabsList()
   if (a === 'getAbsenteesToday')     return getAbsenteesToday()
@@ -1794,20 +1795,34 @@ function getHomeHero() {
   return { success: true, hero: hero, library: readHeroLibrary_() }
 }
 
+const HERO_ANIMS_   = ['none', 'zoom', 'pan', 'drift', 'breathe', 'reveal']
+const HERO_SPEEDS_  = ['slow', 'normal', 'fast']
+const HERO_EFFECTS_ = ['sparkles', 'sweep', 'bokeh', 'confetti']
+
 function setHomeHero(hero) {
-  // Nothing chosen → go back to the built-in dragon video
-  if (!hero || (!hero.url && !String(hero.headline || '').trim())) {
+  hero = hero || {}
+  const headline = String(hero.headline || '').trim().slice(0, 120)
+  const subtext = String(hero.subtext || '').replace(/\r\n/g, '\n').trim().slice(0, 500)
+  const effects = (Array.isArray(hero.effects) ? hero.effects : [])
+    .filter((e, i, arr) => HERO_EFFECTS_.indexOf(e) > -1 && arr.indexOf(e) === i)
+  const url = heroHttps_(hero.url)
+
+  // Nothing chosen at all → go back to the plain built-in dragon video
+  if (!url && !headline && !subtext && !effects.length) {
     settingsSet('homeHero', '', '')
     return { success: true, hero: null, library: readHeroLibrary_() }
   }
-  const url = heroHttps_(hero.url)
   if (hero.url && !url) return { success: false, message: 'The link must start with https://' }
 
   const clean = {
     type: !url ? 'default' : (hero.type === 'image' ? 'image' : 'video'),
     url: url,
     poster: heroHttps_(hero.poster),
-    headline: String(hero.headline || '').trim().slice(0, 60),
+    headline: headline,
+    subtext: subtext,
+    animation: HERO_ANIMS_.indexOf(hero.animation) > -1 ? hero.animation : 'zoom',
+    speed: HERO_SPEEDS_.indexOf(hero.speed) > -1 ? hero.speed : 'normal',
+    effects: effects,
     source: String(hero.source || '').slice(0, 20),
     updatedAt: new Date().toISOString()
   }
@@ -1837,13 +1852,47 @@ function getAnnouncement() {
   catch (_) { return { success: true, announcement: null } }
 }
 
-function setAnnouncement(message, type, authorName) {
+// Home-page message: an optional title plus a long, multi-line body (up to 20,000 characters).
+// Long messages arrive in small parts (announcementChunk) because the app talks to this
+// script through the address bar, which can't carry a whole essay in one request.
+function setAnnouncement(message, type, authorName, title) {
+  const body = String(message || '').replace(/\r\n/g, '\n').trim().slice(0, 20000)
+  if (!body) return { success: false, message: 'Please write a message first.' }
   const payload = JSON.stringify({
-    message, type: type || 'announcement',
-    authorName: authorName || 'HR', postedAt: new Date().toISOString()
+    title: String(title || '').trim().slice(0, 100),
+    message: body,
+    type: type || 'announcement',
+    authorName: authorName || 'HR',
+    postedAt: new Date().toISOString()
   })
   settingsSet('announcement', payload, '')
   return { success: true }
+}
+
+function announcementChunk(sid, index, total, part) {
+  const id = String(sid || '').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 40)
+  const i = parseInt(index, 10)
+  const n = parseInt(total, 10)
+  if (!id || !(n > 0) || n > 150 || !(i >= 0) || i >= n) return { success: false, message: 'Bad message part. Please publish again.' }
+
+  const cache = CacheService.getScriptCache()
+  cache.put('ann_' + id + '_' + i, String(part || ''), 900)
+  if (i < n - 1) return { success: true, done: false }
+
+  // Last part: stitch everything back together
+  let json = ''
+  const keys = []
+  for (let k = 0; k < n; k++) {
+    const key = 'ann_' + id + '_' + k
+    const p = cache.get(key)
+    if (p === null) return { success: false, message: 'Part ' + (k + 1) + ' of ' + n + ' was lost on the way. Please publish again.' }
+    json += p
+    keys.push(key)
+  }
+  cache.removeAll(keys)
+  let obj
+  try { obj = JSON.parse(json) } catch (_) { return { success: false, message: 'The message could not be read. Please publish again.' } }
+  return setAnnouncement(obj.message, obj.type, obj.authorName, obj.title)
 }
 
 function clearAnnouncement() {
