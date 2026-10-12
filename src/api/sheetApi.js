@@ -2,7 +2,7 @@
 // JSONP approach — bypasses CORS completely for Google Apps Script.
 // No fetch() used — injects a <script> tag instead, which browsers allow cross-origin.
 
-const WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbyPcPlKUhmO5Yhn3YLZbkIOGG-tCegqcz6X-GUP8vxrfZBmdY4db0vjqKdJT4BvxXtV/exec'
+const WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbxe6XWDH6d7Z21-z_HkyQPNDdqOlMxSghzG6VlNIrd6Uy3PipSb0G08xm1RGjpE0J9d/exec'
 
 function callApi(action, payload = {}, timeoutMs = 20000) {
   return new Promise((resolve, reject) => {
@@ -69,6 +69,7 @@ export const markAttendanceForDate = ({ date, entries, markedBy }) =>
 export const getAttendanceForDate = ({ date }) =>
   callApi('getAttendanceForDate', { date })
 export const getTodaySummary      = ()                           => callApi('getTodaySummary')
+export const sendReportNow        = ()                           => callApi('sendReportNow', {}, 45000) // emails today's report to management
 export const getAttendanceHistory = (employeeId)                 => callApi('getAttendanceHistory', { employeeId })
 export const getMonthlyAttendance = (employeeId, year, month)    => callApi('getMonthlyAttendance', { employeeId, year, month })
 

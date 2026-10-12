@@ -13,6 +13,7 @@ import DriverKmManager from '../components/DriverKmManager.jsx'
 import PermissionsManager from '../components/PermissionsManager.jsx'
 import MarkPermissionByDate from '../components/MarkPermissionByDate.jsx'
 import AttendancePasswordManager from '../components/AttendancePasswordManager.jsx'
+import HRLiveStrip from '../components/HRLiveStrip.jsx'
 
 export default function HRDashboard() {
   const showToast = useToast()
@@ -108,7 +109,9 @@ export default function HRDashboard() {
         </button>
       </header>
 
-      <div className="grid grid-cols-3 gap-1.5 mb-5 bg-white p-1.5 rounded-2xl border border-brand-100 shadow-card">
+      <HRLiveStrip />
+
+      <div className="grid grid-cols-3 gap-1.5 mb-5 bg-white p-1.5 rounded-2xl border border-brand-100 shadow-card rise" style={{ '--i': 2 }}>
         {[
           { key: 'salary',   label: 'Salary',   icon: '₹' },
           { key: 'editatt',  label: 'Edit Att.', icon: '🗓️' },
@@ -121,13 +124,14 @@ export default function HRDashboard() {
           { key: 'msg',      label: 'Message',  icon: '📣' },
           { key: 'absent',   label: 'Absent',   icon: '📲' },
           { key: 'attpwd',   label: 'Att. Pwd', icon: '🔒' }
-        ].map((t) => (
+        ].map((t, i) => (
           <button
             key={t.key}
+            style={{ '--i': i + 3 }}
             onClick={() => setTab(t.key)}
-            className={`relative py-2 rounded-xl text-[11px] font-semibold transition-all flex flex-col items-center gap-0.5 ${tab === t.key ? 'bg-brand-500 text-white shadow-soft' : 'text-slate-500'}`}
+            className={`rise relative py-2 rounded-xl text-[11px] font-semibold transition-all duration-300 flex flex-col items-center gap-0.5 ${tab === t.key ? 'bg-gradient-to-br from-brand-500 to-brand-700 text-white shadow-soft scale-[1.05]' : 'text-slate-500 hover:bg-brand-50'}`}
           >
-            <span className="text-base leading-none">{t.icon}</span>
+            <span className={`text-base leading-none ${tab === t.key ? 'animate-iconBounce' : ''}`}>{t.icon}</span>
             {t.label}
             {t.key === 'leave' && leaveRequests.length > 0 && (
               <span className="absolute -top-1 -right-1 bg-rust text-white text-[9px] w-4 h-4 rounded-full flex items-center justify-center">

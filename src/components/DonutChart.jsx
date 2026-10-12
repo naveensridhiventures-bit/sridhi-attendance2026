@@ -1,7 +1,12 @@
-import React from 'react'
+import React, { useEffect, useState } from 'react'
 
 // Lightweight dependency-free ring chart. `segments` = [{ value, color }]
 export default function DonutChart({ segments, size = 120, strokeWidth = 14, centerLabel, centerSub }) {
+  const [grow, setGrow] = useState(false)
+  useEffect(() => {
+    const raf = requestAnimationFrame(() => setGrow(true))
+    return () => cancelAnimationFrame(raf)
+  }, [])
   const radius = (size - strokeWidth) / 2
   const circumference = 2 * Math.PI * radius
   const total = segments.reduce((s, seg) => s + seg.value, 0) || 1
@@ -13,8 +18,9 @@ export default function DonutChart({ segments, size = 120, strokeWidth = 14, cen
         <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="#EFFBF2" strokeWidth={strokeWidth} />
         {segments.map((seg, i) => {
           const fraction = seg.value / total
-          const dash = fraction * circumference
+          const dash = grow ? fraction * circumference : 0
           const gap = circumference - dash
+          const dashOffset = -offsetAcc
           const circle = (
             <circle
               key={i}
@@ -25,12 +31,12 @@ export default function DonutChart({ segments, size = 120, strokeWidth = 14, cen
               stroke={seg.color}
               strokeWidth={strokeWidth}
               strokeDasharray={`${dash} ${gap}`}
-              strokeDashoffset={-offsetAcc}
+              strokeDashoffset={dashOffset}
               strokeLinecap="round"
-              className="transition-all duration-700 ease-out"
+              style={{ transition: `stroke-dasharray 1.2s cubic-bezier(0.2,0.8,0.2,1) ${i * 150}ms, stroke-dashoffset 1.2s cubic-bezier(0.2,0.8,0.2,1) ${i * 150}ms` }}
             />
           )
-          offsetAcc += dash
+          offsetAcc += fraction * circumference
           return circle
         })}
       </svg>

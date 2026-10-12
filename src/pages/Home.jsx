@@ -8,6 +8,7 @@ import DonutChart from '../components/DonutChart.jsx'
 import Footer from '../components/Footer.jsx'
 import AnnouncementBanner from '../components/AnnouncementBanner.jsx'
 import useScrollReveal from '../hooks/useScrollReveal.js'
+import TiltCard from '../components/TiltCard.jsx'
 
 export default function Home() {
   const [summary, setSummary] = useState(null)
@@ -118,11 +119,11 @@ export default function Home() {
         )}
 
         <div className="grid gap-3 pb-2">
-          <QuickLink to="/attendance" title="Mark Attendance" desc="List marking with P / WO / NA, or QR self check-in" color="from-brand-500 to-brand-600" />
-          <QuickLink to="/qr-codes" title="Generate QR Code" desc="Download any employee's ID-card QR" color="from-gold-500 to-gold-400" />
-          <QuickLink to="/add-employee" title="Add New Employee" desc="Auto-generates Employee ID, password & QR" color="from-brand-600 to-brand-800" />
-          <QuickLink to="/employee-login" title="Employee Dashboard" desc="Your monthly attendance, leave & QR" color="from-brand-600 to-brand-800" />
-          <QuickLink to="/hr-login" title="HR / Admin Dashboard" desc="Salary management & leave approvals" color="from-ink to-brand-800" />
+          <QuickLink icon="attendance" index={0} to="/attendance" title="Mark Attendance" desc="Mark P, H, A, WO, WOP or NA — or QR self check-in" color="from-brand-500 to-brand-600" />
+          <QuickLink icon="qr" index={1} to="/qr-codes" title="Generate QR Code" desc="Download any employee's ID-card QR" color="from-gold-500 to-gold-400" />
+          <QuickLink icon="add" index={2} to="/add-employee" title="Add New Employee" desc="Auto-generates Employee ID, password & QR" color="from-brand-600 to-brand-800" />
+          <QuickLink icon="person" index={3} to="/employee-login" title="Employee Dashboard" desc="Your monthly attendance, leave & QR" color="from-brand-600 to-brand-800" />
+          <QuickLink icon="shield" index={4} to="/hr-login" title="HR / Admin Dashboard" desc="Salary management & leave approvals" color="from-ink to-brand-800" />
         </div>
 
         <Footer />
@@ -147,42 +148,62 @@ function Legend({ color, label, value }) {
 
 function StatCard({ label, value, total, accent, bar, delay }) {
   const pct = total ? Math.min(100, Math.round(((value || 0) / total) * 100)) : 0
+  const [grow, setGrow] = useState(false)
+  useEffect(() => {
+    const raf = requestAnimationFrame(() => setGrow(true))
+    return () => cancelAnimationFrame(raf)
+  }, [])
   return (
-    <div className="bg-white border border-brand-50 rounded-2xl p-4 shadow-card animate-fadeUp cell-pattern" style={{ animationDelay: `${delay}ms` }}>
-      <p className={`text-2xl font-display font-bold ${accent}`}>
-        <CountUp value={value ?? 0} />
-      </p>
-      <p className="text-xs text-slate-500 mt-0.5">{label}</p>
-      {total != null && (
-        <>
-          <div className="h-1.5 bg-surface rounded-full mt-2.5 overflow-hidden">
-            <div className={`h-full ${bar} rounded-full transition-all duration-700`} style={{ width: `${pct}%` }} />
-          </div>
-          <p className="text-[10px] text-slate-400 mt-1">of {total} total</p>
-        </>
-      )}
-    </div>
+    <TiltCard maxTilt={7} className="rounded-2xl rise" >
+      <div className="sheen bg-white border border-brand-50 rounded-2xl p-4 shadow-card cell-pattern h-full" style={{ '--i': delay / 60 }}>
+        <p className={`text-3xl font-display font-bold ${accent}`}>
+          <CountUp value={value ?? 0} />
+        </p>
+        <p className="text-xs text-slate-500 mt-0.5">{label}</p>
+        {total != null && (
+          <>
+            <div className="h-1.5 bg-surface rounded-full mt-2.5 overflow-hidden">
+              <div className={`h-full ${bar} rounded-full`} style={{ width: grow ? `${pct}%` : '0%', transition: `width 1.1s cubic-bezier(0.2,0.8,0.2,1) ${delay}ms` }} />
+            </div>
+            <p className="text-[10px] text-slate-400 mt-1">of {total} total</p>
+          </>
+        )}
+      </div>
+    </TiltCard>
   )
 }
 
-function QuickLink({ to, title, desc, color }) {
+const ICONS = {
+  attendance: <path d="M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 0 1 2 2v13a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zm3 11 2.5 2.5L16 12" />,
+  qr: <path d="M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h3v3h-3zM18 18h3v3h-3z" />,
+  add: <path d="M12 5v14M5 12h14" />,
+  person: <path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4.5 20a7.5 7.5 0 0 1 15 0" />,
+  shield: <path d="M12 3 4 6v6c0 4.5 3.2 7.8 8 9 4.8-1.2 8-4.5 8-9V6zM9 12l2.2 2.2L15.5 10" />
+}
+
+function QuickLink({ to, title, desc, color, icon = 'attendance', index = 0 }) {
   const [ref, visible] = useScrollReveal()
   return (
     <Link
       ref={ref}
       to={to}
-      className={`group flex items-center gap-4 bg-white border border-brand-50 rounded-2xl p-4 shadow-card active:scale-[0.98] transition-all duration-500 ${
-        visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'
+      style={{ transitionDelay: visible ? `${index * 60}ms` : '0ms' }}
+      className={`group sheen lift flex items-center gap-4 bg-white border border-brand-50 rounded-2xl p-4 shadow-card active:scale-[0.98] transition-all duration-500 ${
+        visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-6'
       }`}
     >
-      <div className={`w-11 h-11 shrink-0 rounded-xl bg-gradient-to-br ${color} flex items-center justify-center text-white font-display font-bold`}>
-        {title.charAt(0)}
+      <div className={`relative w-12 h-12 shrink-0 rounded-2xl bg-gradient-to-br ${color} flex items-center justify-center text-white shadow-soft transition-transform duration-500 group-hover:rotate-[-8deg] group-hover:scale-110`}>
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          {ICONS[icon]}
+        </svg>
       </div>
       <div className="min-w-0">
         <p className="font-display font-semibold text-ink text-sm">{title}</p>
         <p className="text-xs text-slate-500 mt-0.5">{desc}</p>
       </div>
-      <span className="ml-auto text-brand-400 group-active:translate-x-0.5 transition-transform">-&gt;</span>
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" className="ml-auto shrink-0 text-brand-400 transition-transform duration-300 group-hover:translate-x-1.5">
+        <path d="m9 6 6 6-6 6" />
+      </svg>
     </Link>
   )
 }

@@ -1,5 +1,5 @@
 import React from 'react'
-import { NavLink } from 'react-router-dom'
+import { NavLink, useLocation } from 'react-router-dom'
 
 const tabs = [
   {
@@ -47,29 +47,45 @@ const tabs = [
   }
 ]
 
+const DASH_ROUTES = ['/dashboard-login', '/employee-login', '/hr-login', '/employee-dashboard', '/hr-dashboard']
+
+function activeIndex(pathname) {
+  if (pathname === '/') return 0
+  if (pathname.startsWith('/attendance')) return 1
+  if (pathname.startsWith('/qr-codes')) return 2
+  if (DASH_ROUTES.some((r) => pathname.startsWith(r))) return 3
+  return -1
+}
+
 export default function BottomNav() {
+  const { pathname } = useLocation()
+  const idx = activeIndex(pathname)
   return (
     <nav className="fixed sm:absolute bottom-0 inset-x-0 z-40 px-4 pb-3 safe-bottom pointer-events-none">
       <div className="max-w-md mx-auto bg-ink/95 backdrop-blur-xl rounded-[1.75rem] shadow-[0_10px_30px_-6px_rgba(9,61,31,0.55)] border border-white/5 pointer-events-auto">
-        <div className="grid grid-cols-4 px-1.5 py-1.5">
-          {tabs.map((t) => (
+        <div className="relative grid grid-cols-4 px-1.5 py-1.5">
+          {/* One gradient pill that glides to whichever tab is active */}
+          <span
+            aria-hidden="true"
+            className="nav-pill absolute top-1.5 bottom-1.5 left-1.5 pointer-events-none"
+            style={{ width: 'calc((100% - 0.75rem) / 4)', transform: `translateX(${Math.max(idx, 0) * 100}%)`, opacity: idx < 0 ? 0 : 1 }}
+          >
+            <span className="block w-full h-full rounded-2xl bg-gradient-to-br from-brand-500/35 to-brand-700/20 ring-1 ring-brand-400/30" />
+          </span>
+          {tabs.map((t, i) => (
             <NavLink
               key={t.to}
               to={t.to}
-              className="flex flex-col items-center justify-center gap-1 py-2 rounded-2xl text-[10px] font-semibold transition-all duration-300"
+              className="relative flex flex-col items-center justify-center gap-1 py-2 rounded-2xl text-[10px] font-semibold transition-all duration-300"
             >
-              {({ isActive }) => (
-                <>
-                  <span
-                    className={`flex items-center justify-center w-10 h-8 rounded-xl transition-all duration-300 ${
-                      isActive ? 'bg-gradient-to-br from-brand-400 to-brand-600 text-white shadow-soft scale-105' : 'text-slate-400'
-                    }`}
-                  >
-                    {t.icon}
-                  </span>
-                  <span className={isActive ? 'text-white' : 'text-slate-500'}>{t.label}</span>
-                </>
-              )}
+              <span
+                className={`flex items-center justify-center w-10 h-8 rounded-xl transition-all duration-500 ${
+                  idx === i ? 'bg-gradient-to-br from-brand-400 to-brand-600 text-white shadow-soft -translate-y-0.5 scale-110' : 'text-slate-400'
+                }`}
+              >
+                {t.icon}
+              </span>
+              <span className={`transition-colors duration-300 ${idx === i ? 'text-white' : 'text-slate-500'}`}>{t.label}</span>
             </NavLink>
           ))}
         </div>

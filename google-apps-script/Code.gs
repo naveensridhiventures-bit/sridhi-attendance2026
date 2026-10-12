@@ -121,6 +121,7 @@ function route_(body) {
   if (a === 'markAttendanceForDate') return markAttendanceForDate(body)
   if (a === 'getAttendanceForDate')  return getAttendanceForDate(body)
   if (a === 'getTodaySummary')       return getTodaySummary()
+  if (a === 'sendReportNow')         return sendReportNow()
   if (a === 'getMonthlyAttendance')  return getMonthlyAttendance(body.employeeId, body.year, body.month)
   if (a === 'getAttendanceHistory')  return getAttendanceHistory(body.employeeId)
   if (a === 'getMonthlySalary')      return getMonthlySalary(body.year, body.month)
@@ -218,8 +219,9 @@ function getSS() { return SpreadsheetApp.openById(SHEET_ID) }
 // ─── Month helpers ────────────────────────────────────────────────────────────
 
 function currentYM() {
-  const now = new Date()
-  return { year: now.getFullYear(), month: now.getMonth() + 1 }
+  // Always the IST month, whatever time-zone the Apps Script project itself is set to
+  const p = Utilities.formatDate(new Date(), TZ, 'yyyy-MM').split('-')
+  return { year: parseInt(p[0], 10), month: parseInt(p[1], 10) }
 }
 
 // "June-2026"
@@ -1870,30 +1872,41 @@ function initLogsTab() {
 
 
 // ─── 5 PM daily attendance report (email) ─────────────────────────────────────
-// Every evening at 5 PM IST, ALERT_EMAILS get one short report so management
-// can decide quickly:
+// Every evening at 5 PM IST, ALERT_EMAILS get one designed HTML report so
+// management can decide quickly:
+//   • who has NOT marked attendance (big red alert card)
 //   • who took PERMISSION today
-//   • who is ABSENT (A), WOP, WO, Half Day (H)
-//   • who is still NOT MARKED
-// It is sent every day (even if everything is fine).
+//   • who is ABSENT, WOP, WO, Half Day
+//   • what needs a decision
+// It is sent every day (even when everything is fine).
 //
-// ONE-TIME SETUP: in Apps Script pick  installAttendanceReminderTrigger
-// from the function dropdown, click Run, accept the permission prompt
-// (needs permission to send email). Re-running is safe — old triggers are
-// removed first, so you never get duplicate emails.
+// ONE-TIME SETUP (do this after pasting the code and saving):
+//   1. Pick  installAttendanceReminderTrigger  in the function dropdown → Run.
+//   2. Accept the permission prompt (it needs permission to send email).
+//   3. A "Reminder activated" mail arrives at the first address — if it does,
+//      the 5 PM report will arrive too.
+//   4. Pick  testDailyAttendanceReport → Run to see today's report right now.
+// Triggers run the SAVED code, so no new web-app deployment is needed for
+// the email part. Re-running install is safe (old triggers are removed first).
 //
-// HOW "5 PM SHARP" WORKS: a plain daily trigger can fire up to ~15 min late,
-// so instead a tiny 1-minute trigger checks the clock and sends the moment
-// it is 5:00 PM IST (once per day; if a run is skipped it still sends within
-// the next 30 minutes).
+// HOW "5 PM SHARP" WORKS: a 1-minute trigger checks the clock and sends at
+// 5:00 PM IST. A second daily trigger (fires inside the 5 PM hour) is a
+// backup. A "already sent today" flag guarantees only ONE mail per day.
 
 function esc_(t) {
   return String(t == null ? '' : t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 }
 
+// Today's calendar date in IST, independent of the Apps Script project's own
+// time-zone setting (built at noon so DST/offset quirks can never shift the day).
+function istToday_() {
+  const p = Utilities.formatDate(new Date(), TZ, 'yyyy-MM-dd').split('-')
+  return new Date(parseInt(p[0], 10), parseInt(p[1], 10) - 1, parseInt(p[2], 10), 12, 0, 0)
+}
+
 function buildDailyReport_() {
-  const now = new Date()
-  const ym = { year: now.getFullYear(), month: now.getMonth() + 1 }
+  const day = istToday_()
+  const ym = { year: day.getFullYear(), month: day.getMonth() + 1 }
   const today = todayStr()
   const empSh = getEmpSheet()
   const employees = (empSh && empSh.getLastRow() > 1) ? rows2obj_(empSh.getDataRange().getValues()) : []
@@ -1904,7 +1917,7 @@ function buildDailyReport_() {
   const sh = getSS().getSheetByName(attTabName(ym.year, ym.month))
   if (sh && sh.getLastRow() > 1) {
     const vals = sh.getDataRange().getValues()
-    const dateColIdx = findDateColIdx_(vals[0], now)
+    const dateColIdx = findDateColIdx_(vals[0], day)
     if (dateColIdx > -1) {
       colFound = true
       vals.slice(1).forEach(row => {
@@ -1915,90 +1928,210 @@ function buildDailyReport_() {
   }
 
   const g = { P: [], H: [], A: [], WO: [], WOP: [], NA: [], NONE: [] }
+  const seen = {}
   employees.forEach(e => {
     const name = String(e.Name || '').trim()
-    if (!name) return
-    const st = statusMap[normName_(name)] || ''
-    if (!st) g.NONE.push(name)
-    else if (g[st]) g[st].push(name)
+    const key = normName_(name)
+    if (!name || seen[key]) return
+    seen[key] = true
+    const st = statusMap[key] || ''
+    const item = { name: name, type: String(e.Type || '') }
+    if (!st) g.NONE.push(item)
+    else if (g[st]) g[st].push(item)
+    else g.NONE.push(item) // unknown/garbled value counts as "not properly marked"
   })
 
   // permissions requested for TODAY (ignore rejected ones)
   const perms = (getPermissionsForMonth(ym.year, ym.month).requests || [])
     .filter(r => String(r.date) === today && String(r.status || '').toLowerCase() !== 'rejected')
 
-  return { today, total: employees.length, colFound, g, perms }
+  const total = Object.keys(seen).length
+  const attended = g.P.length + g.H.length + g.WOP.length
+  const expected = Math.max(1, total - g.WO.length - g.NA.length)
+  const rate = Math.max(0, Math.min(100, Math.round(attended / expected * 100)))
+
+  return { today, total, colFound, g, perms, rate, attended }
+}
+
+// ── HTML building blocks (inline CSS only — Gmail strips most <style> blocks) ──
+
+function chips_(arr, bg, fg) {
+  if (!arr.length) return '<span style="color:#94A3B8;font-size:13px">— nobody —</span>'
+  return arr.map(e =>
+    '<span style="display:inline-block;margin:3px 6px 3px 0;padding:5px 12px 5px 5px;background:' + bg + ';color:' + fg +
+    ';border-radius:999px;font-size:13px;font-weight:600;white-space:nowrap">' +
+    '<span style="display:inline-block;width:22px;height:22px;line-height:22px;text-align:center;border-radius:50%;background:' + fg +
+    ';color:#ffffff;font-size:11px;margin-right:7px">' + esc_(e.name.charAt(0).toUpperCase()) + '</span>' + esc_(e.name) + '</span>'
+  ).join('')
+}
+
+function section_(icon, title, count, accent, body) {
+  return '<tr><td style="padding:20px 28px 0">' +
+    '<table width="100%" cellpadding="0" cellspacing="0" border="0"><tr>' +
+    '<td style="border-left:4px solid ' + accent + ';padding-left:12px;font-size:15px;font-weight:800;color:#0E2418">' +
+    icon + '&nbsp; ' + title +
+    ' <span style="display:inline-block;background:' + accent + ';color:#ffffff;border-radius:999px;padding:1px 10px;font-size:12px;font-weight:800;margin-left:6px">' + count + '</span>' +
+    '</td></tr><tr><td style="padding:10px 0 0 16px">' + body + '</td></tr></table></td></tr>'
+}
+
+function tile_(num, label, bg, fg) {
+  return '<td width="33.33%" style="padding:5px"><table width="100%" cellpadding="0" cellspacing="0" border="0"><tr>' +
+    '<td align="center" style="background:' + bg + ';border-radius:14px;padding:14px 4px">' +
+    '<div style="font-size:28px;font-weight:800;color:' + fg + ';line-height:1">' + num + '</div>' +
+    '<div style="font-size:11px;font-weight:700;color:' + fg + ';letter-spacing:.6px;text-transform:uppercase;margin-top:6px">' + label + '</div>' +
+    '</td></tr></table></td>'
+}
+
+function permStatusChip_(status) {
+  const s = String(status || 'pending').toLowerCase()
+  const c = s === 'approved' ? ['#DCFCE7', '#15803D'] : s === 'pending' ? ['#FEF3C7', '#B45309'] : ['#E2E8F0', '#475569']
+  return '<span style="display:inline-block;background:' + c[0] + ';color:' + c[1] + ';border-radius:999px;padding:2px 10px;font-size:11px;font-weight:800;text-transform:uppercase">' + esc_(s) + '</span>'
+}
+
+function buildReportHtml_(r, dateLabel, timeLabel) {
+  const g = r.g
+  const pendingPerms = r.perms.filter(p => String(p.status || 'pending').toLowerCase() === 'pending').length
+
+  // "For your decision" bullets — only things that actually need attention
+  const todo = []
+  if (g.NONE.length) todo.push('📵 <b>' + g.NONE.length + '</b> not marked — follow up before day close')
+  if (g.A.length) todo.push('🔴 <b>' + g.A.length + '</b> absent — confirm leave / loss of pay')
+  if (pendingPerms) todo.push('⏱️ <b>' + pendingPerms + '</b> permission request' + (pendingPerms > 1 ? 's' : '') + ' waiting for approval')
+  if (g.WOP.length) todo.push('🟣 <b>' + g.WOP.length + '</b> worked on week off (WOP) — paid double')
+  if (g.H.length) todo.push('🟠 <b>' + g.H.length + '</b> half day — paid 0.5 day')
+  const decisionHtml = todo.length
+    ? todo.map(t => '<div style="padding:5px 0;font-size:14px;color:#334155">' + t + '</div>').join('')
+    : '<div style="padding:5px 0;font-size:14px;color:#15803D;font-weight:700">🎉 Nothing needs action today — all clear!</div>'
+
+  // Not-marked alert card (the main thing management asked to see)
+  const alertCard = r.colFound === false
+    ? '<tr><td style="padding:20px 28px 0"><table width="100%" cellpadding="0" cellspacing="0" border="0"><tr><td style="background:#FEF3C7;border:1px solid #F59E0B;border-radius:16px;padding:16px 18px;color:#92400E;font-size:14px;font-weight:700">' +
+      '⚠️ Today\'s column was not found in the attendance sheet, so nobody could be read as marked. Please open the attendance sheet.</td></tr></table></td></tr>'
+    : g.NONE.length
+      ? '<tr><td style="padding:20px 28px 0"><table width="100%" cellpadding="0" cellspacing="0" border="0"><tr>' +
+        '<td style="background-color:#B91C1C;background-image:linear-gradient(135deg,#EF4444,#B91C1C);border-radius:18px;padding:18px 20px">' +
+        '<div style="font-size:12px;font-weight:800;letter-spacing:1.4px;color:#FECACA;text-transform:uppercase">Attendance not marked</div>' +
+        '<div style="font-size:24px;font-weight:800;color:#ffffff;margin:4px 0 12px">⚠️ ' + g.NONE.length + ' of ' + r.total + ' employees</div>' +
+        '<div style="background:#ffffff;border-radius:12px;padding:8px 10px">' + chips_(g.NONE, '#FEE2E2', '#B91C1C') + '</div>' +
+        '</td></tr></table></td></tr>'
+      : '<tr><td style="padding:20px 28px 0"><table width="100%" cellpadding="0" cellspacing="0" border="0"><tr>' +
+        '<td style="background-color:#15803D;background-image:linear-gradient(135deg,#22C55E,#15803D);border-radius:18px;padding:18px 20px;color:#ffffff;font-size:18px;font-weight:800">' +
+        '✅ Everyone\'s attendance is marked today</td></tr></table></td></tr>'
+
+  // Permission rows
+  const permBody = r.perms.length
+    ? '<table width="100%" cellpadding="0" cellspacing="0" border="0">' + r.perms.map(p =>
+        '<tr><td style="padding:8px 0;border-bottom:1px solid #E2E8F0;font-size:14px;color:#0E2418">' +
+        '<b>' + esc_(p.name) + '</b> &nbsp;<span style="background:#E0E7FF;color:#3730A3;border-radius:6px;padding:2px 8px;font-size:12px;font-weight:700">' + esc_(p.hours || '?') + '</span>' +
+        (p.reason ? '<div style="color:#64748B;font-size:12px;margin-top:3px">' + esc_(p.reason) + '</div>' : '') +
+        '</td><td align="right" style="padding:8px 0;border-bottom:1px solid #E2E8F0">' + permStatusChip_(p.status) + '</td></tr>'
+      ).join('') + '</table>'
+    : '<span style="color:#94A3B8;font-size:13px">— nobody —</span>'
+
+  return '<!DOCTYPE html><html><body style="margin:0;padding:0;background:#EEF4F0">' +
+    '<table width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#EEF4F0"><tr><td align="center" style="padding:24px 10px">' +
+    '<table width="620" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:620px;background:#ffffff;border-radius:24px;overflow:hidden;font-family:Segoe UI,Roboto,Helvetica,Arial,sans-serif;box-shadow:0 10px 30px rgba(15,102,48,.15)">' +
+
+    // header
+    '<tr><td style="background-color:#0F6630;background-image:linear-gradient(135deg,#0C5128,#1F9D4C 60%,#45BE63);padding:28px 28px 24px">' +
+    '<div style="font-size:12px;font-weight:800;letter-spacing:2px;color:#A9E7B7;text-transform:uppercase">Sridhi Ventures</div>' +
+    '<div style="font-size:26px;font-weight:800;color:#ffffff;margin:6px 0 4px">Daily Attendance Report</div>' +
+    '<div style="font-size:14px;color:#D7F4DD">📅 ' + esc_(dateLabel) + ' &nbsp;·&nbsp; 🕔 ' + esc_(timeLabel) + '</div>' +
+    '</td></tr>' +
+
+    // attendance rate
+    '<tr><td style="padding:22px 28px 4px"><table width="100%" cellpadding="0" cellspacing="0" border="0"><tr>' +
+    '<td style="font-size:13px;font-weight:700;color:#475569">Attendance rate</td>' +
+    '<td align="right" style="font-size:22px;font-weight:800;color:#147F3D">' + r.rate + '%</td></tr>' +
+    '<tr><td colspan="2" style="padding-top:8px"><table width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#E2E8F0;border-radius:999px"><tr>' +
+    '<td width="' + Math.max(r.rate, 1) + '%" style="background-color:#1F9D4C;background-image:linear-gradient(90deg,#1F9D4C,#45BE63);height:10px;border-radius:999px;font-size:0;line-height:0">&nbsp;</td>' +
+    '<td style="font-size:0;line-height:0">&nbsp;</td></tr></table></td></tr></table></td></tr>' +
+
+    // stat tiles
+    '<tr><td style="padding:12px 23px 0"><table width="100%" cellpadding="0" cellspacing="0" border="0">' +
+    '<tr>' + tile_(g.P.length, 'Present', '#DCFCE7', '#15803D') + tile_(g.A.length, 'Absent', '#FEE2E2', '#B91C1C') + tile_(g.NONE.length, 'Not marked', '#E2E8F0', '#334155') + '</tr>' +
+    '<tr>' + tile_(g.H.length, 'Half day', '#FFEDD5', '#C2410C') + tile_(g.WO.length, 'Week off', '#FEF9C3', '#A16207') + tile_(g.WOP.length, 'WOP', '#F3E8FF', '#7E22CE') + '</tr>' +
+    '</table></td></tr>' +
+
+    alertCard +
+
+    // decisions
+    '<tr><td style="padding:20px 28px 0"><table width="100%" cellpadding="0" cellspacing="0" border="0"><tr>' +
+    '<td style="background:#F0FDF4;border:1px solid #BBF7D0;border-radius:16px;padding:14px 18px">' +
+    '<div style="font-size:12px;font-weight:800;letter-spacing:1.2px;color:#15803D;text-transform:uppercase;margin-bottom:4px">📌 For your decision</div>' + decisionHtml +
+    '</td></tr></table></td></tr>' +
+
+    section_('⏱️', 'Permission today', r.perms.length, '#4F46E5', permBody) +
+    section_('🔴', 'Absent', g.A.length, '#DC2626', chips_(g.A, '#FEE2E2', '#B91C1C')) +
+    section_('🟣', 'WOP — worked on week off', g.WOP.length, '#9333EA', chips_(g.WOP, '#F3E8FF', '#7E22CE')) +
+    section_('🟡', 'WO — week off', g.WO.length, '#CA8A04', chips_(g.WO, '#FEF9C3', '#A16207')) +
+    section_('🟠', 'Half day', g.H.length, '#EA580C', chips_(g.H, '#FFEDD5', '#C2410C')) +
+
+    // footer
+    '<tr><td style="padding:26px 28px 24px"><div style="border-top:1px solid #E2E8F0;padding-top:16px;font-size:12px;color:#94A3B8;text-align:center">' +
+    'Auto-generated at 5:00 PM IST by the Sridhi Ventures Attendance System<br>Total staff: ' + r.total + ' · Present (P + H + WOP): ' + r.attended + '</div></td></tr>' +
+    '</table></td></tr></table></body></html>'
+}
+
+function buildReportText_(r, dateLabel) {
+  const g = r.g
+  const names = a => a.length ? a.map(e => e.name).join(', ') : 'None'
+  const permLines = r.perms.map(p => '  • ' + p.name + ' — ' + (p.hours || '?') + (p.reason ? ' (' + p.reason + ')' : '') + ' [' + (p.status || 'pending') + ']')
+  return [
+    'ATTENDANCE REPORT — ' + dateLabel, '',
+    'Total ' + r.total + ' | Present ' + g.P.length + ' | Half Day ' + g.H.length + ' | Absent ' + g.A.length +
+      ' | WO ' + g.WO.length + ' | WOP ' + g.WOP.length + ' | NOT MARKED ' + g.NONE.length + ' | Rate ' + r.rate + '%', '',
+    'NOT MARKED (' + g.NONE.length + '): ' + names(g.NONE), '',
+    'PERMISSION today (' + r.perms.length + '):' + (permLines.length ? '' : ' None')
+  ].concat(permLines).concat([
+    '',
+    'ABSENT (' + g.A.length + '): ' + names(g.A),
+    'WOP - worked on week off (' + g.WOP.length + '): ' + names(g.WOP),
+    'WO - week off (' + g.WO.length + '): ' + names(g.WO),
+    'HALF DAY (' + g.H.length + '): ' + names(g.H),
+    '', 'Please review and decide. — Sridhi Ventures Attendance'
+  ]).join('\n')
 }
 
 function sendDailyAttendanceReport() {
   const r = buildDailyReport_()
   const dateLabel = Utilities.formatDate(new Date(), TZ, 'dd-MMM-yyyy (EEEE)')
-  const subject = 'Attendance Report 5 PM — ' + dateLabel
+  const timeLabel = Utilities.formatDate(new Date(), TZ, 'h:mm a') + ' IST'
+  const g = r.g
 
-  if (!r.colFound) {
-    MailApp.sendEmail({ to: ALERT_EMAILS.join(','), subject: subject,
-      body: 'Could not read today\'s column in the attendance sheet, so the 5 PM report could not be prepared. Please open the attendance sheet.',
-      name: 'Sridhi Attendance' })
-    return { sent: true, ok: false }
+  const flags = []
+  if (!r.colFound) flags.push('⚠️ sheet column missing')
+  else {
+    if (g.NONE.length) flags.push('⚠️ ' + g.NONE.length + ' not marked')
+    if (g.A.length) flags.push(g.A.length + ' absent')
   }
-
-  const names = a => a.length ? a.join(', ') : 'None'
-  const permLines = r.perms.map(p => p.name + ' — ' + (p.hours || '?') + (p.reason ? ' (' + p.reason + ')' : '') + ' [' + (p.status || 'pending') + ']')
-
-  // ── plain-text version ──
-  const lines = [
-    'Attendance report — ' + dateLabel, '',
-    'Total staff: ' + r.total + ' | Present: ' + r.g.P.length + ' | Half Day: ' + r.g.H.length +
-      ' | Absent: ' + r.g.A.length + ' | WO: ' + r.g.WO.length + ' | WOP: ' + r.g.WOP.length +
-      ' | Not marked: ' + r.g.NONE.length, '',
-    'PERMISSION today (' + permLines.length + '): ' + (permLines.length ? '' : 'None')
-  ].concat(permLines.map(x => '  • ' + x)).concat([
-    '',
-    'ABSENT (' + r.g.A.length + '): ' + names(r.g.A),
-    'WOP - worked on week off (' + r.g.WOP.length + '): ' + names(r.g.WOP),
-    'WO - week off (' + r.g.WO.length + '): ' + names(r.g.WO),
-    'HALF DAY (' + r.g.H.length + '): ' + names(r.g.H),
-    'NOT MARKED (' + r.g.NONE.length + '): ' + names(r.g.NONE),
-    '', 'Please review and decide. — Sridhi Ventures Attendance'
-  ])
-
-  // ── HTML version ──
-  const row = (label, color, arr, extraHtml) =>
-    '<tr><td style="padding:8px 12px;border:1px solid #ddd;background:' + color + ';white-space:nowrap"><b>' + label + ' (' + arr + ')</b></td>' +
-    '<td style="padding:8px 12px;border:1px solid #ddd">' + extraHtml + '</td></tr>'
-  const listHtml = a => a.length ? a.map(esc_).join(', ') : '<span style="color:#888">None</span>'
-  const permHtml = permLines.length ? permLines.map(x => '• ' + esc_(x)).join('<br>') : '<span style="color:#888">None</span>'
-
-  const html =
-    '<div style="font-family:Arial,sans-serif;font-size:14px">' +
-    '<h3 style="margin:0 0 6px">Attendance report — ' + esc_(dateLabel) + '</h3>' +
-    '<p style="margin:0 0 12px">Total <b>' + r.total + '</b> · Present <b>' + r.g.P.length + '</b> · Half Day <b>' + r.g.H.length +
-    '</b> · Absent <b>' + r.g.A.length + '</b> · Not marked <b>' + r.g.NONE.length + '</b></p>' +
-    '<table style="border-collapse:collapse">' +
-    row('Permission today', '#E8F0FE', permLines.length, permHtml) +
-    row('Absent', '#FFD6D6', r.g.A.length, listHtml(r.g.A)) +
-    row('WOP', '#E9D5FF', r.g.WOP.length, listHtml(r.g.WOP)) +
-    row('WO', '#FFFFB3', r.g.WO.length, listHtml(r.g.WO)) +
-    row('Half Day', '#FFE0B2', r.g.H.length, listHtml(r.g.H)) +
-    row('Not marked', '#EEEEEE', r.g.NONE.length, listHtml(r.g.NONE)) +
-    '</table><p style="color:#666;font-size:12px;margin-top:12px">Please review and decide. — Sridhi Ventures Attendance</p></div>'
+  const subject = '📋 Attendance Report 5 PM — ' + dateLabel + (flags.length ? ' | ' + flags.join(' | ') : ' | ✅ all clear')
 
   MailApp.sendEmail({
     to: ALERT_EMAILS.join(','),
-    subject: subject + (r.g.NONE.length ? ' — ' + r.g.NONE.length + ' not marked' : ''),
-    body: lines.join('\n'),
-    htmlBody: html,
+    subject: subject,
+    body: buildReportText_(r, dateLabel),
+    htmlBody: buildReportHtml_(r, dateLabel, timeLabel),
     name: 'Sridhi Attendance'
   })
-  return { sent: true, ok: true }
+  return { sent: true, notMarked: g.NONE.length, absent: g.A.length, present: g.P.length, total: r.total, colFound: r.colFound }
 }
 
-// Runs every minute (cheap: exits immediately unless it is 5:00–5:29 PM IST
-// and today's report hasn't gone out yet).
+// Called by the web app ("Send report now" button on the HR dashboard).
+function sendReportNow() {
+  try {
+    const res = sendDailyAttendanceReport()
+    return { success: true, message: 'Report sent to ' + ALERT_EMAILS.join(' and '), ...res }
+  } catch (err) {
+    return { success: false, message: 'Could not send: ' + err.message }
+  }
+}
+
+// Runs every minute (cheap: exits immediately unless it is the 5 PM hour IST
+// and today's report hasn't gone out yet). Also called by the daily backup trigger.
 function attendanceReminderTick() {
   const hour = parseInt(Utilities.formatDate(new Date(), TZ, 'H'), 10)
-  const minute = parseInt(Utilities.formatDate(new Date(), TZ, 'm'), 10)
-  if (hour !== ALERT_HOUR || minute > 29) return
+  if (hour !== ALERT_HOUR) return // only during 5:00–5:59 PM IST
 
   const lock = LockService.getScriptLock()
   if (!lock.tryLock(10000)) return
@@ -2011,6 +2144,7 @@ function attendanceReminderTick() {
       sendDailyAttendanceReport()
     } catch (err) {
       props.deleteProperty('lastReportDate') // let the next minute retry
+      Logger.log('Report failed, will retry: ' + err)
       throw err
     }
   } finally {
@@ -2023,8 +2157,33 @@ function installAttendanceReminderTrigger() {
     const fn = t.getHandlerFunction()
     if (fn === 'sendUnmarkedAttendanceAlert' || fn === 'attendanceReminderTick') ScriptApp.deleteTrigger(t)
   })
+  // 1) every minute — sends at 5:00 PM sharp
   ScriptApp.newTrigger('attendanceReminderTick').timeBased().everyMinutes(1).create()
+  // 2) daily backup inside the 5 PM hour — in case the minute trigger is ever skipped
+  ScriptApp.newTrigger('attendanceReminderTick').timeBased().everyDays(1).atHour(ALERT_HOUR).nearMinute(0).inTimezone(TZ).create()
+
+  // Confirmation mail: proves email permission works right now
+  MailApp.sendEmail({
+    to: ALERT_EMAILS[0],
+    subject: '✅ Sridhi Attendance — 5 PM report is now active',
+    htmlBody: '<div style="font-family:Segoe UI,Arial,sans-serif;max-width:480px;margin:auto;border-radius:16px;overflow:hidden;border:1px solid #D7F4DD">' +
+      '<div style="background:#1F9D4C;color:#fff;padding:20px 24px;font-size:20px;font-weight:800">✅ Reminder activated</div>' +
+      '<div style="padding:18px 24px;color:#334155;font-size:14px;line-height:1.6">Every day at <b>5:00 PM IST</b> the attendance report will be emailed to:<br><b>' +
+      ALERT_EMAILS.join('<br>') + '</b></div></div>',
+    body: 'Reminder activated. The 5:00 PM IST attendance report will go to: ' + ALERT_EMAILS.join(', '),
+    name: 'Sridhi Attendance'
+  })
   Logger.log('Installed: report goes to ' + ALERT_EMAILS.join(', ') + ' at ' + ALERT_HOUR + ':00 ' + TZ + ' every day')
+}
+
+// Run by hand if the mail ever stops: shows triggers, quota and last send in View > Logs
+function checkReminderSetup() {
+  const trig = ScriptApp.getProjectTriggers().filter(t => t.getHandlerFunction() === 'attendanceReminderTick')
+  Logger.log('Active reminder triggers: ' + trig.length + ' (should be 2)')
+  Logger.log('Email quota left today: ' + MailApp.getRemainingDailyQuota())
+  Logger.log('Last report sent for date: ' + (PropertiesService.getScriptProperties().getProperty('lastReportDate') || 'never'))
+  Logger.log('Project time-zone: ' + Session.getScriptTimeZone() + ' | App time-zone: ' + TZ)
+  Logger.log('Recipients: ' + ALERT_EMAILS.join(', '))
 }
 
 // Run by hand any time to send today's report immediately (for testing)
