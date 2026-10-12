@@ -1,72 +1,38 @@
 import React, { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { getTodaySummary } from '../api/sheetApi.js'
+import { getHomeHero } from '../api/sheetApi.js'
 import MarqueeBanner from '../components/MarqueeBanner.jsx'
-import DarkModeToggle from '../components/DarkModeToggle.jsx'
-import CountUp from '../components/CountUp.jsx'
-import DonutChart from '../components/DonutChart.jsx'
 import Footer from '../components/Footer.jsx'
 import AnnouncementBanner from '../components/AnnouncementBanner.jsx'
+import HomeHero from '../components/HomeHero.jsx'
 import useScrollReveal from '../hooks/useScrollReveal.js'
-import TiltCard from '../components/TiltCard.jsx'
+
+const HERO_CACHE = 'sv-home-hero'
+
+// The last hero the admin published is remembered on the device, so the Home page
+// opens with the right picture straight away instead of flashing the default first.
+function readCachedHero() {
+  try { return JSON.parse(localStorage.getItem(HERO_CACHE) || 'null') } catch (_) { return null }
+}
 
 export default function Home() {
-  const [summary, setSummary] = useState(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
+  const [hero, setHero] = useState(readCachedHero)
 
   useEffect(() => {
-    load()
+    getHomeHero()
+      .then((d) => {
+        setHero(d.hero || null)
+        try {
+          if (d.hero) localStorage.setItem(HERO_CACHE, JSON.stringify(d.hero))
+          else localStorage.removeItem(HERO_CACHE)
+        } catch (_) { /* ignore */ }
+      })
+      .catch(() => {})
   }, [])
-
-  async function load() {
-    setLoading(true)
-    setError('')
-    try {
-      const data = await getTodaySummary()
-      setSummary(data)
-    } catch (e) {
-      setError(e.message)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const todayStr = new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
 
   return (
     <div>
-      <div className="rounded-b-[2rem] px-5 pt-8 pb-10 shadow-soft relative overflow-hidden bg-brand-800">
-        <video
-          className="absolute inset-0 w-full h-full object-cover"
-          src="/dragon-bg.mp4"
-          poster="/dragon-bg-poster.jpg"
-          autoPlay
-          loop
-          muted
-          playsInline
-          preload="auto"
-        />
-        {/* Legibility overlays: darken left/bottom for text, let the dragon breathe top-right */}
-        <div className="absolute inset-0 bg-gradient-to-br from-ink/80 via-ink/35 to-transparent" />
-        <div className="absolute inset-x-0 bottom-0 h-28 bg-gradient-to-t from-brand-900/90 to-transparent" />
-        <div className="relative max-w-md mx-auto animate-fadeUp">
-          <div className="flex items-center gap-3 mb-3">
-            <img src="/logo.png" alt="Sridhi" className="w-12 h-12 rounded-2xl bg-white object-contain p-1.5 shadow-lg animate-breatheGlow" />
-            <div className="min-w-0">
-              <p className="text-white font-display font-bold text-base leading-tight">Sridhi Ventures</p>
-              <p className="text-brand-100 text-[11px]">Attendance & Workforce Management</p>
-            </div>
-            <DarkModeToggle className="ml-auto" />
-          </div>
-          <div className="flex items-center gap-2 mb-2">
-            <span className="w-2 h-2 rounded-full bg-gold-400 animate-pulse" />
-            <span className="text-brand-50 text-[11px] font-semibold tracking-widest uppercase">Live System</span>
-          </div>
-          <p className="text-brand-50 text-sm">{todayStr}</p>
-          <h1 className="font-display text-2xl font-bold text-shimmer mt-1">Welcome back</h1>
-        </div>
-      </div>
+      <HomeHero hero={hero} />
 
       <div className="px-5 -mt-6 max-w-md mx-auto relative z-10">
         <AnnouncementBanner />
@@ -79,46 +45,7 @@ export default function Home() {
           ]}
         />
 
-        {loading && (
-          <div className="grid grid-cols-2 gap-3 mb-6">
-            {[1, 2, 3, 4].map((i) => (
-              <div key={i} className="h-24 rounded-2xl skeleton" />
-            ))}
-          </div>
-        )}
-        {error && <p className="text-rust text-sm mb-4">{error}</p>}
-
-        {summary && (
-          <>
-            <div className="bg-white border border-brand-50 rounded-2xl p-4 shadow-card mb-3 flex items-center gap-4 cell-pattern animate-fadeUp">
-              <DonutChart
-                size={92}
-                strokeWidth={11}
-                centerLabel={summary.officePresent + summary.productionPresent}
-                centerSub="present"
-                segments={[
-                  { value: summary.officePresent || 0, color: '#1F9D4C' },
-                  { value: summary.productionPresent || 0, color: '#E8A317' },
-                  { value: Math.max(summary.officeTotal + summary.productionTotal - summary.officePresent - summary.productionPresent, 0.0001), color: '#E2E8F0' }
-                ]}
-              />
-              <div className="flex-1 space-y-1.5">
-                <Legend color="bg-brand-500" label="Office Present" value={summary.officePresent} />
-                <Legend color="bg-gold-500" label="Production Present" value={summary.productionPresent} />
-                <Legend color="bg-slate-300" label="Not Marked Yet" value={Math.max(summary.officeTotal + summary.productionTotal - summary.officePresent - summary.productionPresent, 0)} />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3 mb-6">
-              <StatCard label="Office Present" value={summary.officePresent} total={summary.officeTotal} accent="text-brand-600" bar="bg-brand-500" delay={0} />
-              <StatCard label="Office Absent" value={summary.officeAbsent} total={summary.officeTotal} accent="text-rust" bar="bg-rust" delay={60} />
-              <StatCard label="Production Present" value={summary.productionPresent} total={summary.productionTotal} accent="text-brand-600" bar="bg-brand-500" delay={120} />
-              <StatCard label="Production Absent" value={summary.productionAbsent} total={summary.productionTotal} accent="text-rust" bar="bg-rust" delay={180} />
-            </div>
-          </>
-        )}
-
-        <div className="grid gap-3 pb-2">
+        <div className="grid gap-3 pb-2 mt-1">
           <QuickLink icon="attendance" index={0} to="/attendance" title="Mark Attendance" desc="Mark P, H, A, WO, WOP or NA — or QR self check-in" color="from-brand-500 to-brand-600" />
           <QuickLink icon="qr" index={1} to="/qr-codes" title="Generate QR Code" desc="Download any employee's ID-card QR" color="from-gold-500 to-gold-400" />
           <QuickLink icon="add" index={2} to="/add-employee" title="Add New Employee" desc="Auto-generates Employee ID, password & QR" color="from-brand-600 to-brand-800" />
@@ -129,47 +56,6 @@ export default function Home() {
         <Footer />
       </div>
     </div>
-  )
-}
-
-function Legend({ color, label, value }) {
-  return (
-    <div className="flex items-center justify-between text-xs">
-      <span className="flex items-center gap-1.5 text-slate-500">
-        <span className={`w-2 h-2 rounded-sm ${color}`} />
-        {label}
-      </span>
-      <span className="font-semibold text-ink">
-        <CountUp value={value} />
-      </span>
-    </div>
-  )
-}
-
-function StatCard({ label, value, total, accent, bar, delay }) {
-  const pct = total ? Math.min(100, Math.round(((value || 0) / total) * 100)) : 0
-  const [grow, setGrow] = useState(false)
-  useEffect(() => {
-    const raf = requestAnimationFrame(() => setGrow(true))
-    return () => cancelAnimationFrame(raf)
-  }, [])
-  return (
-    <TiltCard maxTilt={7} className="rounded-2xl rise" >
-      <div className="sheen bg-white border border-brand-50 rounded-2xl p-4 shadow-card cell-pattern h-full" style={{ '--i': delay / 60 }}>
-        <p className={`text-3xl font-display font-bold ${accent}`}>
-          <CountUp value={value ?? 0} />
-        </p>
-        <p className="text-xs text-slate-500 mt-0.5">{label}</p>
-        {total != null && (
-          <>
-            <div className="h-1.5 bg-surface rounded-full mt-2.5 overflow-hidden">
-              <div className={`h-full ${bar} rounded-full`} style={{ width: grow ? `${pct}%` : '0%', transition: `width 1.1s cubic-bezier(0.2,0.8,0.2,1) ${delay}ms` }} />
-            </div>
-            <p className="text-[10px] text-slate-400 mt-1">of {total} total</p>
-          </>
-        )}
-      </div>
-    </TiltCard>
   )
 }
 

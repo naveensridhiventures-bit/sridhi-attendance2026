@@ -60,6 +60,7 @@ function toDisplayStatus_(raw) {
 const LIGHTWEIGHT_ACTIONS = new Set([
   'getAnnouncement', 'setAnnouncement', 'clearAnnouncement',
   'getHeroImage', 'setHeroImage',
+  'getHomeHero', 'setHomeHero', 'removeHomeHeroItem',
   'dashboardLogin', 'hrLogin',
   'getHrWhatsappNumber', 'setHrWhatsappNumber',
   'verifyAttendancePassword', 'setAttendancePassword',
@@ -134,6 +135,9 @@ function route_(body) {
   if (a === 'updateLeaveStatus')     return updateLeaveStatus(body.requestId, body.status, body.remarks)
   if (a === 'getHeroImage')          return getHeroImage()
   if (a === 'setHeroImage')          return setHeroImage(body.imageUrl, body.caption)
+  if (a === 'getHomeHero')           return getHomeHero()
+  if (a === 'setHomeHero')           return setHomeHero(body.hero)
+  if (a === 'removeHomeHeroItem')    return removeHomeHeroItem(body.url)
   if (a === 'getAnnouncement')       return getAnnouncement()
   if (a === 'setAnnouncement')       return setAnnouncement(body.message, body.type, body.authorName)
   if (a === 'clearAnnouncement')     return clearAnnouncement()
@@ -1764,6 +1768,66 @@ function getHeroImage() {
 function setHeroImage(imageUrl, caption) {
   settingsSet('heroImage', imageUrl || '', caption || '')
   return { success: true }
+}
+
+// ─── Home page hero (video or photo chosen by admin) ───────────────────────────
+// Stored in the Settings tab as JSON:
+//   homeHero         → { type: 'video' | 'image' | 'default', url, poster, headline, source, updatedAt }
+//   homeHeroLibrary  → [ { id, type, url, poster, at } ]  (last 8 published, so admin can re-apply one)
+// Media itself lives on Cloudinary or Google Drive — only the link is saved here.
+
+function heroHttps_(u) {
+  const v = String(u || '').trim()
+  return /^https:\/\//i.test(v) ? v.slice(0, 1500) : ''
+}
+
+function readHeroLibrary_() {
+  const row = settingsGet('homeHeroLibrary')
+  try { const a = row && row.value ? JSON.parse(row.value) : []; return Array.isArray(a) ? a : [] }
+  catch (_) { return [] }
+}
+
+function getHomeHero() {
+  const row = settingsGet('homeHero')
+  let hero = null
+  try { hero = row && row.value ? JSON.parse(row.value) : null } catch (_) { hero = null }
+  return { success: true, hero: hero, library: readHeroLibrary_() }
+}
+
+function setHomeHero(hero) {
+  // Nothing chosen → go back to the built-in dragon video
+  if (!hero || (!hero.url && !String(hero.headline || '').trim())) {
+    settingsSet('homeHero', '', '')
+    return { success: true, hero: null, library: readHeroLibrary_() }
+  }
+  const url = heroHttps_(hero.url)
+  if (hero.url && !url) return { success: false, message: 'The link must start with https://' }
+
+  const clean = {
+    type: !url ? 'default' : (hero.type === 'image' ? 'image' : 'video'),
+    url: url,
+    poster: heroHttps_(hero.poster),
+    headline: String(hero.headline || '').trim().slice(0, 60),
+    source: String(hero.source || '').slice(0, 20),
+    updatedAt: new Date().toISOString()
+  }
+  settingsSet('homeHero', JSON.stringify(clean), '')
+
+  // Remember it in the library (newest first, no duplicates, max 8)
+  let library = readHeroLibrary_()
+  if (url) {
+    library = library.filter(x => x.url !== url)
+    library.unshift({ id: 'H' + Date.now(), type: clean.type, url: url, poster: clean.poster, at: clean.updatedAt })
+    library = library.slice(0, 8)
+    settingsSet('homeHeroLibrary', JSON.stringify(library), '')
+  }
+  return { success: true, hero: clean, library: library }
+}
+
+function removeHomeHeroItem(url) {
+  const library = readHeroLibrary_().filter(x => x.url !== url)
+  settingsSet('homeHeroLibrary', JSON.stringify(library), '')
+  return { success: true, library: library }
 }
 
 function getAnnouncement() {

@@ -1,18 +1,12 @@
 import React, { useEffect, useState } from 'react'
 import { getHeroImage, setHeroImage } from '../api/sheetApi.js'
 import { useToast } from './Toast.jsx'
+import { CLOUDINARY } from '../config/cloudinary.js'
 
-// ─── CONFIGURE THESE TWO VALUES ───────────────────────────────────────────────
-// 1. Go to https://cloudinary.com → Settings → Upload → Upload presets
-//    Create an UNSIGNED preset and paste the name below.
-// 2. Find your Cloud Name on the Cloudinary dashboard top-left.
-const CLOUD_NAME  = 'djwgtjdda'   // your real Cloudinary Cloud Name
-const UPLOAD_PRESET = 'sridhi-hero' // your real unsigned upload preset
-// ──────────────────────────────────────────────────────────────────────────────
+// Cloudinary account details live in src/config/cloudinary.js
+const CLOUD_NAME = CLOUDINARY.cloudName
+const UPLOAD_PRESET = CLOUDINARY.preset
 
-// Just checks both values were actually filled in — no longer compares
-// against specific placeholder text, which is what caused the button to
-// stay disabled even after real credentials were pasted in above.
 const isConfigured = Boolean(CLOUD_NAME && CLOUD_NAME.trim()) && Boolean(UPLOAD_PRESET && UPLOAD_PRESET.trim())
 
 export default function HeroImageUploader() {

@@ -90,6 +90,11 @@ export const updateLeaveStatus    = (requestId, status, remarks) => callApi('upd
 export const getHeroImage         = ()                           => callApi('getHeroImage')
 export const setHeroImage         = (imageUrl, caption)          => callApi('setHeroImage', { imageUrl, caption })
 
+// ---------- Home page hero media (video or photo chosen by admin) ----------
+export const getHomeHero          = ()                           => callApi('getHomeHero')
+export const setHomeHero          = (hero)                       => callApi('setHomeHero', { hero })
+export const removeHomeHeroItem   = (url)                        => callApi('removeHomeHeroItem', { url })
+
 // ---------- HR Announcements ----------
 export const getAnnouncement      = ()                           => callApi('getAnnouncement')
 export const setAnnouncement      = (message, type, authorName)  => callApi('setAnnouncement', { message, type, authorName })

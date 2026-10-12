@@ -254,3 +254,16 @@ button:active, a:active {
 .dark .skeleton { background: #13241A; }
 .dark .skeleton::after { background: linear-gradient(90deg, transparent, rgba(31,157,76,0.18), transparent); background-size: 200% 100%; }
 .dark ::-webkit-scrollbar-thumb { background: #1F3A2A; }
+
+/* ---------------- Home hero media ---------------- */
+@keyframes kenBurns {
+  from { transform: scale(1.02) translate3d(0, 0, 0); }
+  to   { transform: scale(1.14) translate3d(-2%, -2%, 0); }
+}
+.ken-burns { animation: kenBurns 24s ease-in-out infinite alternate; }
+
+@keyframes mediaIn {
+  from { opacity: 0; filter: blur(10px); }
+  to   { opacity: 1; filter: blur(0); }
+}
+.media-in { animation: mediaIn 1s ease both; }

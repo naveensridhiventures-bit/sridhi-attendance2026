@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { getAllEmployeesFull, updateSalary, getAllLeaveRequests, updateLeaveStatus } from '../api/sheetApi.js'
 import { useToast } from '../components/Toast.jsx'
 import HeroImageUploader from '../components/HeroImageUploader.jsx'
+import HomeHeroManager from '../components/HomeHeroManager.jsx'
 import MessageComposer from '../components/MessageComposer.jsx'
 import MonthlySalaryView from '../components/MonthlySalaryView.jsx'
 import LogsView from '../components/LogsView.jsx'
@@ -120,7 +121,8 @@ export default function HRDashboard() {
           { key: 'leave',    label: 'Leave',    icon: '📋' },
           { key: 'perm',     label: 'Permissions', icon: '⏱️' },
           { key: 'logs',     label: 'Logs',     icon: '🕒' },
-          { key: 'hero',     label: 'Hero',     icon: '🖼' },
+          { key: 'homehero', label: 'Home Media', icon: '🎬' },
+          { key: 'hero',     label: 'Att. Photo', icon: '🖼' },
           { key: 'msg',      label: 'Message',  icon: '📣' },
           { key: 'absent',   label: 'Absent',   icon: '📲' },
           { key: 'attpwd',   label: 'Att. Pwd', icon: '🔒' }
@@ -269,6 +271,12 @@ export default function HRDashboard() {
       {tab === 'logs' && (
         <div className="animate-popIn">
           <LogsView />
+        </div>
+      )}
+
+      {tab === 'homehero' && (
+        <div className="animate-popIn">
+          <HomeHeroManager />
         </div>
       )}
 
