@@ -1,9 +1,11 @@
-import React, { useState } from 'react'
-import { Routes, Route, useLocation } from 'react-router-dom'
+import React, { useRef, useState } from 'react'
+import { Routes, Route } from 'react-router-dom'
 import BottomNav from './components/BottomNav.jsx'
 import Splash from './components/Splash.jsx'
 import InstallPrompt from './components/InstallPrompt.jsx'
 import AnimatedBackdrop from './components/AnimatedBackdrop.jsx'
+import TouchFX from './components/TouchFX.jsx'
+import PageTransition from './components/PageTransition.jsx'
 import useGlobalRipple from './hooks/useGlobalRipple.js'
 import Home from './pages/Home.jsx'
 import Attendance from './pages/Attendance.jsx'
@@ -16,7 +18,7 @@ import HRDashboard from './pages/HRDashboard.jsx'
 
 export default function App() {
   const [showSplash, setShowSplash] = useState(() => !sessionStorage.getItem('sv-splash-shown'))
-  const location = useLocation()
+  const scrollRef = useRef(null)
   useGlobalRipple()
 
   function dismissSplash() {
@@ -29,21 +31,25 @@ export default function App() {
       <div className="relative w-full max-w-[480px] mx-auto min-h-screen sm:min-h-0 sm:h-[min(920px,92vh)] sm:rounded-[2.75rem] sm:shadow-2xl sm:shadow-black/50 sm:ring-1 sm:ring-white/10 sm:overflow-hidden bg-surface text-ink font-body flex flex-col">
         <AnimatedBackdrop />
         {showSplash && <Splash onDone={dismissSplash} />}
+        <TouchFX />
         <InstallPrompt />
-        <div className="relative z-10 flex-1 pb-28 safe-top sm:overflow-y-auto">
-          <div key={location.pathname} className="page-fade">
-            <Routes location={location}>
-              <Route path="/" element={<Home />} />
-              <Route path="/attendance" element={<Attendance />} />
-              <Route path="/qr-codes" element={<QRGenerate />} />
-              <Route path="/add-employee" element={<AddEmployee />} />
-              <Route path="/dashboard-login" element={<DashboardChooser />} />
-              <Route path="/employee-login" element={<PortalLogin portal="employee" />} />
-              <Route path="/hr-login" element={<PortalLogin portal="hr" />} />
-              <Route path="/employee-dashboard" element={<EmployeeDashboard />} />
-              <Route path="/hr-dashboard" element={<HRDashboard />} />
-            </Routes>
-          </div>
+        <div ref={scrollRef} className="relative z-10 flex-1 pb-28 safe-top sm:overflow-y-auto">
+          <PageTransition
+            scrollRef={scrollRef}
+            render={(location) => (
+              <Routes location={location}>
+                <Route path="/" element={<Home />} />
+                <Route path="/attendance" element={<Attendance />} />
+                <Route path="/qr-codes" element={<QRGenerate />} />
+                <Route path="/add-employee" element={<AddEmployee />} />
+                <Route path="/dashboard-login" element={<DashboardChooser />} />
+                <Route path="/employee-login" element={<PortalLogin portal="employee" />} />
+                <Route path="/hr-login" element={<PortalLogin portal="hr" />} />
+                <Route path="/employee-dashboard" element={<EmployeeDashboard />} />
+                <Route path="/hr-dashboard" element={<HRDashboard />} />
+              </Routes>
+            )}
+          />
         </div>
         <BottomNav />
       </div>

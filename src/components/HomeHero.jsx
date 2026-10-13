@@ -5,6 +5,15 @@ import HeroEffects, { SPEED_MUL } from './HeroEffects.jsx'
 // The media layer behind the hero: the admin's video or photo, or the built-in dragon video.
 // Photos get the motion style the admin chose. If the file can't load (bad link, private Drive file)
 // it quietly falls back to the default.
+// Default greeting follows the time on the device
+function greeting() {
+  const h = new Date().getHours()
+  if (h < 5) return 'Working late'
+  if (h < 12) return 'Good morning'
+  if (h < 17) return 'Good afternoon'
+  return 'Good evening'
+}
+
 export function HeroMedia({ hero, onFail }) {
   const [failed, setFailed] = useState(false)
   useEffect(() => setFailed(false), [hero?.url])
@@ -64,7 +73,7 @@ export function HeroMedia({ hero, onFail }) {
 // `headline` / `subtext` override the saved values so the admin sees edits live before publishing.
 export default function HomeHero({ hero, headline, subtext, preview = false, onMediaFail }) {
   const today = new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
-  const title = (headline ?? hero?.headline) || 'Welcome back'
+  const title = (headline ?? hero?.headline) || greeting()
   const body = (subtext ?? hero?.subtext) || ''
 
   return (

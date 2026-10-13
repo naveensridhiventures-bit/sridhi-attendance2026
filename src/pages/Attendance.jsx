@@ -310,12 +310,12 @@ export default function Attendance() {
               <div className="grid grid-cols-6 gap-1.5">
                 {STATUS_OPTIONS.map((opt) => (
                   <button
-                    key={opt.key}
+                    key={opt.key + (status === opt.key ? '-on' : '')}
                     onClick={() => setStatus(opt.key)}
                     title={opt.full}
                     className={`flex flex-col items-center justify-center gap-0.5 py-2.5 rounded-xl text-[10px] font-bold border transition-all ${
                       status === opt.key
-                        ? `bg-gradient-to-br ${opt.color} text-white border-transparent shadow-soft scale-105`
+                        ? `bg-gradient-to-br ${opt.color} text-white border-transparent shadow-soft scale-105 status-pop`
                         : 'bg-surface text-slate-500 border-brand-100'
                     }`}
                   >

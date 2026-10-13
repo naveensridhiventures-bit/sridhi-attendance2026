@@ -26,7 +26,7 @@ export function ToastProvider({ children }) {
         {toasts.map((t) => (
           <div
             key={t.id}
-            className={`max-w-md w-full pointer-events-auto flex items-center gap-2.5 rounded-2xl px-4 py-3 shadow-soft text-sm font-medium animate-toastIn ${
+            className={`relative overflow-hidden max-w-md w-full pointer-events-auto flex items-center gap-2.5 rounded-2xl px-4 py-3 shadow-soft text-sm font-medium toast-spring ${
               t.type === 'success'
                 ? 'bg-ink text-white border border-brand-500/40'
                 : t.type === 'error'
@@ -46,6 +46,11 @@ export function ToastProvider({ children }) {
               )}
             </span>
             {t.message}
+            <span
+              aria-hidden="true"
+              className="absolute left-0 bottom-0 h-[3px] w-full origin-left bg-white/50"
+              style={{ animation: 'toastLife 3.2s linear forwards' }}
+            />
           </div>
         ))}
       </div>

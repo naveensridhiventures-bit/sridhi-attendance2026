@@ -14,7 +14,7 @@ const MODES = [
   { key: 'video', label: 'Video', sub: 'Looping' },
   { key: 'image', label: 'Photo', sub: 'Slow zoom' }
 ]
-const GREETINGS = ['Welcome back', 'Happy Pongal 🌾', 'Happy Diwali 🪔', 'Happy New Year 🎉', 'Team of the month 🏆']
+const GREETINGS = ['Good morning', 'Happy Pongal 🌾', 'Happy Diwali 🪔', 'Happy New Year 🎉', 'Team of the month 🏆']
 
 const ANIMATIONS = [
   { key: 'zoom', label: 'Slow zoom', hint: 'Gentle push-in' },
@@ -450,7 +450,7 @@ export default function HomeHeroManager() {
             maxLength={120}
             value={draft.headline}
             onChange={(e) => setDraft((d) => ({ ...d, headline: e.target.value }))}
-            placeholder="Welcome back"
+            placeholder="Good morning (changes with the time of day)"
             className="input text-sm"
           />
           <div className="flex items-end justify-between mt-3 mb-1.5">
@@ -469,7 +469,7 @@ export default function HomeHeroManager() {
             {GREETINGS.map((g) => (
               <button
                 key={g}
-                onClick={() => setDraft((d) => ({ ...d, headline: g === 'Welcome back' ? '' : g }))}
+                onClick={() => setDraft((d) => ({ ...d, headline: g === 'Good morning' ? '' : g }))}
                 className="text-[11px] rounded-full border border-brand-100 bg-surface px-2.5 py-1 text-slate-600 active:scale-95"
               >
                 {g}
